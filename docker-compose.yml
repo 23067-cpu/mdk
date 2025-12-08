@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: nexasolft_db
+    environment:
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_PASSWORD=StrongPassw0rd!123
+      - MSSQL_PID=Express
+    ports:
+      - "1433:1433"
+    volumes:
+      - mssql_data:/var/opt/mssql
+    # Run sqlservr in background, wait, then create DB using the correct path for sqlcmd
+    command: >
+      /bin/bash -c " /opt/mssql/bin/sqlservr &  sleep 30;  echo 'Initializing database...'; if [ -f /opt/mssql-tools18/bin/sqlcmd ]; then
+        /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'StrongPassw0rd!123' -d master -C -Q \"IF NOT EXISTS (SELECT * FROM sys.databases WHERE name = 'NexasolftTreasury') BEGIN CREATE DATABASE NexasolftTreasury; END\";
+      else
+        /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P 'StrongPassw0rd!123' -d master -Q \"IF NOT EXISTS (SELECT * FROM sys.databases WHERE name = 'NexasolftTreasury') BEGIN CREATE DATABASE NexasolftTreasury; END\";
+      fi; wait"
+    networks:
+      - nexasolft_net
+
+  backend:
+    build: ./Backend
+    container_name: nexasolft_backend
+    # Wait for DB, make migrations for api, then migrate and run server
+    command: sh -c "while ! nc -z db 1433; do sleep 1; echo 'Waiting for SQL Server...'; done; echo 'SQL Server port is open!'; sleep 30; python manage.py makemigrations treasury_api && python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
+    volumes:
+      - ./Backend:/app
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+    environment:
+      - DB_HOST=db
+      - DB_NAME=NexasolftTreasury
+      - DB_USER=sa
+      - DB_PASSWORD=StrongPassw0rd!123
+      - DB_PORT=1433
+    networks:
+      - nexasolft_net
+
+  frontend:
+    build: ./Frontend
+    container_name: nexasolft_frontend
+    volumes:
+      - ./Frontend:/app
+      - /app/node_modules
+    ports:
+      - "3000:3000"
+    command: npm run dev
+    networks:
+      - nexasolft_net
+
+volumes:
+  mssql_data:
+
+
+networks:
+  nexasolft_net:
+    driver: bridge
