@@ -1,294 +1,561 @@
-import Layout from '../../components/Layout'
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/router'
-import TransactionModal from '../../components/TransactionModal'
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/router';
+import { useTranslation } from 'next-i18next';
+import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
+import { motion } from 'framer-motion';
+import Link from 'next/link';
+import {
+    ArrowLeft, FolderOpen, DollarSign, Calendar, User,
+    FileText, TrendingUp, TrendingDown, Clock, CheckCircle,
+    XCircle, Printer, AlertTriangle, Plus, Send, ThumbsUp, ThumbsDown
+} from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
+import { folioApi, transactionApi, Folio, Transaction, downloadFile } from '../../services/api';
+import BilletageModal from '../../components/BilletageModal';
 
-interface Transaction {
-    id: number;
-    type: string;
-    amount: string;
-    payment_method: string;
-    reference: string;
-    description: string;
-    created_at: string;
-    receipt_number: string | null;
+// Closure Modal (Approve/Reject only)
+interface ClosureModalProps {
+    isOpen: boolean;
+    folio: Folio;
+    onClose: () => void;
+    onSuccess: () => void;
+    action: 'approve' | 'reject';
 }
 
-interface Folio {
-    id: number;
-    code: string;
-    opening_balance: string;
-    running_balance: number; // Calculated in frontend or fetched
-    status: string;
-    opened_at: string;
-    transactions: Transaction[];
-}
-
-export default function FolioDetails() {
-    const router = useRouter()
-    const { id } = router.query
-    const [folio, setFolio] = useState<Folio | null>(null)
-    const [loading, setLoading] = useState(true)
-    const [isModalOpen, setIsModalOpen] = useState(false)
-    const [error, setError] = useState('')
+function ClosureModal({ isOpen, folio, onClose, onSuccess, action }: ClosureModalProps) {
+    const { t } = useTranslation('common');
+    const [actualBalance, setActualBalance] = useState('');
+    const [notes, setNotes] = useState('');
+    const [reason, setReason] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
 
     useEffect(() => {
-        if (id) {
-            fetchFolioDetails()
+        if (action === 'approve' && folio.actual_physical_balance) {
+            setActualBalance(folio.actual_physical_balance.toString());
         }
-    }, [id])
+    }, [action, folio]);
 
-    const fetchFolioDetails = async () => {
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setError('');
+        setLoading(true);
+
         try {
-            const token = localStorage.getItem('token')
-            const res = await fetch(`http://localhost:8000/api/folios/${id}/`, {
-                headers: { 'Authorization': `Token ${token}` }
-            })
-            const data = await res.json()
-            if (data.id) {
-                // Calculate running balance locally for now or use what API gives if implemented
-                // The API view we wrote returns 'folio' object. Wait, the ViewSet default retrieve returns the object.
-                // We didn't customize retrieve in ViewSet to include running_balance, but Dashboard does.
-                // Let's rely on the transactions list to show history.
-                // Ideally we should update the serializer or view to send running_balance.
-                // For this demo, let's just show the static data.
-                setFolio(data)
+            let result;
+            if (action === 'approve') {
+                result = await folioApi.approveClosure(folio.id, {
+                    notes,
+                    actual_physical_balance: actualBalance ? parseFloat(actualBalance) : undefined,
+                });
+            } else {
+                result = await folioApi.rejectClosure(folio.id, reason);
             }
-        } catch (error) {
-            console.error("Error fetching folio:", error)
+
+            if (result.success) {
+                onSuccess();
+                onClose();
+            } else {
+                setError(result.message || 'Error');
+            }
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Error');
         } finally {
-            setLoading(false)
+            setLoading(false);
         }
-    }
+    };
 
-    const handleAddTransaction = async (transactionData: any) => {
-        try {
-            const token = localStorage.getItem('token')
-            const res = await fetch('http://localhost:8000/api/transactions/', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Token ${token}`
-                },
-                body: JSON.stringify(transactionData)
-            })
-            const data = await res.json()
-            if (data.success) {
-                setIsModalOpen(false)
-                fetchFolioDetails() // Refresh data
-            } else {
-                alert(data.message || "Erreur lors de l'ajout")
-            }
-        } catch (error) {
-            alert("Erreur réseau")
-        }
-    }
-
-    const handleCloseFolio = async () => {
-        if (!confirm("Êtes-vous sûr de vouloir clôturer ce folio ? Cette action est irréversible.")) return;
-
-        try {
-            const token = localStorage.getItem('token')
-            const res = await fetch(`http://localhost:8000/api/folios/${id}/close/`, {
-                method: 'POST',
-                headers: { 'Authorization': `Token ${token}` }
-            })
-            const data = await res.json()
-            if (data.success) {
-                fetchFolioDetails()
-            } else {
-                alert(data.message || "Erreur lors de la clôture")
-            }
-        } catch (error) {
-            alert("Erreur réseau")
-        }
-    }
-
-    const handlePrintReceipt = async (transactionId: number) => {
-        try {
-            const token = localStorage.getItem('token')
-            const res = await fetch(`http://localhost:8000/api/transactions/${transactionId}/print_receipt/`, {
-                method: 'POST',
-                headers: { 'Authorization': `Token ${token}` }
-            })
-
-            if (res.ok) {
-                const blob = await res.blob()
-                const url = window.URL.createObjectURL(blob)
-                const a = document.createElement('a')
-                a.href = url
-                a.download = `receipt_${transactionId}.pdf`
-                document.body.appendChild(a)
-                a.click()
-                a.remove()
-            } else {
-                alert("Erreur lors de la génération du reçu")
-            }
-        } catch (error) {
-            alert("Erreur lors de l'impression")
-        }
-    }
-
-    if (loading) return <Layout><div className="p-4">Chargement...</div></Layout>
-    if (!folio) return <Layout><div className="p-4">Folio introuvable</div></Layout>
+    if (!isOpen) return null;
 
     return (
-        <Layout title={`Folio ${folio.code} - NexaSolft`}>
-            <div className="space-y-6">
-                {/* Header */}
-                <div className="md:flex md:items-center md:justify-between">
-                    <div className="min-w-0 flex-1">
-                        <h2 className="text-2xl font-bold leading-7 text-gray-900 sm:truncate sm:text-3xl sm:tracking-tight">
-                            Détails du Folio: {folio.code}
-                        </h2>
-                        <div className="mt-1 flex flex-col sm:mt-0 sm:flex-row sm:flex-wrap sm:space-x-6">
-                            <div className="mt-2 flex items-center text-sm text-gray-500">
-                                Statut: <span className={`ml-2 inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset ${folio.status === 'OPEN' ? 'bg-green-50 text-green-700 ring-green-600/20' : 'bg-gray-50 text-gray-600 ring-gray-500/10'}`}>{folio.status}</span>
-                            </div>
-                            <div className="mt-2 flex items-center text-sm text-gray-500">
-                                Solde Ouverture: {folio.opening_balance} MRU
-                            </div>
+        <div className="modal-overlay" onClick={onClose}>
+            <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="modal-content"
+                onClick={(e) => e.stopPropagation()}
+            >
+                <div className="p-6">
+                    <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-6">
+                        {action === 'approve' && t('folio.approve_closure')}
+                        {action === 'reject' && t('folio.reject_closure')}
+                    </h2>
+
+                    {error && (
+                        <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 rounded-xl text-red-700 text-sm">
+                            {error}
                         </div>
-                    </div>
-                    <div className="mt-4 flex md:ml-4 md:mt-0 space-x-3">
-                        {folio.status === 'OPEN' && (
+                    )}
+
+                    <form onSubmit={handleSubmit} className="space-y-4">
+                        {action === 'approve' && (
                             <>
-                                <button
-                                    onClick={() => setIsModalOpen(true)}
-                                    type="button"
-                                    className="inline-flex items-center rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
-                                >
-                                    Ajouter Transaction
-                                </button>
-                                <button
-                                    onClick={handleCloseFolio}
-                                    type="button"
-                                    className="inline-flex items-center rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600"
-                                >
-                                    Clôturer Folio
-                                </button>
+                                <div>
+                                    <label className="label">{t('folio.actual_balance')}</label>
+                                    <div className="relative">
+                                        <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                                        <input
+                                            type="number"
+                                            value={actualBalance}
+                                            onChange={(e) => setActualBalance(e.target.value)}
+                                            className="input pl-12"
+                                            placeholder={folio.running_balance.toString()}
+                                            step="0.01"
+                                        />
+                                    </div>
+                                    <div className="flex justify-between text-xs text-gray-500 mt-1">
+                                        <span>Solde calculé (Théorique): {folio.running_balance.toFixed(2)} MRU</span>
+                                        {folio.actual_physical_balance && (
+                                            <span className="text-blue-600 font-medium">Billetage soumis: {folio.actual_physical_balance} MRU</span>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="label">{t('folio.notes')}</label>
+                                    <textarea
+                                        value={notes}
+                                        onChange={(e) => setNotes(e.target.value)}
+                                        className="input"
+                                        rows={3}
+                                    />
+                                </div>
                             </>
+                        )}
+
+                        {action === 'reject' && (
+                            <div>
+                                <label className="label">Raison du rejet *</label>
+                                <textarea
+                                    value={reason}
+                                    onChange={(e) => setReason(e.target.value)}
+                                    className="input"
+                                    rows={3}
+                                    required
+                                    placeholder="Expliquez la raison du rejet..."
+                                />
+                            </div>
+                        )}
+
+                        <div className="flex gap-3 pt-4">
+                            <button type="button" onClick={onClose} className="btn-secondary flex-1" disabled={loading}>
+                                {t('common.cancel')}
+                            </button>
+                            <button
+                                type="submit"
+                                className={`flex-1 ${action === 'reject' ? 'btn-danger' : 'btn-success'}`}
+                                disabled={loading || (action === 'reject' && !reason)}
+                            >
+                                {loading ? <span className="spinner" /> : t('common.confirm')}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </motion.div>
+        </div>
+    );
+}
+
+export default function FolioDetailPage() {
+    const { t } = useTranslation('common');
+    const router = useRouter();
+    const { id } = router.query;
+    const { user, hasRole } = useAuth();
+
+    const [folio, setFolio] = useState<Folio | null>(null);
+    const [transactions, setTransactions] = useState<Transaction[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    // Modals
+    const [closureModal, setClosureModal] = useState<{ open: boolean; action: 'approve' | 'reject' }>({
+        open: false,
+        action: 'approve',
+    });
+    const [isBilletageModalOpen, setIsBilletageModalOpen] = useState(false);
+
+    const fetchData = async () => {
+        if (!id) return;
+        setLoading(true);
+        try {
+            const [folioData, transactionData] = await Promise.all([
+                folioApi.get(Number(id)),
+                transactionApi.list({ folio: Number(id) }),
+            ]);
+            setFolio(folioData);
+            setTransactions(transactionData);
+        } catch (error) {
+            console.error('Error fetching data:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchData();
+    }, [id]);
+
+    const handlePrintSummary = async () => {
+        if (!folio) return;
+        try {
+            const blob = await folioApi.printSummary(folio.id);
+            downloadFile(blob, `folio_${folio.code}.pdf`);
+        } catch (error) {
+            console.error('Error printing summary:', error);
+        }
+    };
+
+    const handleProposeClosure = async (total: number, counts: { denomination: number; quantity: number }[]) => {
+        if (!folio) return;
+        try {
+            const result = await folioApi.proposeClosure(folio.id, {
+                notes: 'Clôture par Billetage',
+                actual_physical_balance: total,
+                cash_counts: counts
+            });
+
+            if (result.success) {
+                fetchData();
+            } else {
+                alert(result.message || 'Erreur lors de la proposition de clôture');
+            }
+        } catch (error) {
+            console.error('Error proposing closure:', error);
+            alert('Erreur technique lors de la clôture');
+        }
+    };
+
+    const formatCurrency = (amount: string | number) => {
+        const num = typeof amount === 'string' ? parseFloat(amount) : amount;
+        return new Intl.NumberFormat('fr-FR', { minimumFractionDigits: 2 }).format(num) + ' MRU';
+    };
+
+    const formatDate = (dateString: string) => {
+        return new Date(dateString).toLocaleDateString('fr-FR', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+        });
+    };
+
+    if (loading) {
+        return (
+            <div className="space-y-6">
+                <div className="skeleton h-10 w-64 rounded" />
+                <div className="skeleton h-48 rounded-2xl" />
+                <div className="skeleton h-96 rounded-2xl" />
+            </div>
+        );
+    }
+
+    if (!folio) {
+        return (
+            <div className="empty-state py-20">
+                <FolderOpen className="empty-state-icon" />
+                <h3 className="text-lg font-medium mb-2">Folio non trouvé</h3>
+                <Link href="/folios" className="btn-primary mt-4">
+                    Retour aux folios
+                </Link>
+            </div>
+        );
+    }
+
+    const canProposeClosure = folio.status === 'OPEN' && hasRole(['ADMIN', 'GERANT', 'CAISSIER']);
+    const canApproveClosure = folio.status === 'CLOSURE_PROPOSED' && hasRole(['ADMIN', 'GERANT']);
+    const canRejectClosure = folio.status === 'CLOSURE_PROPOSED' && hasRole(['ADMIN', 'GERANT']);
+    const canAddTransaction = folio.status === 'OPEN' && hasRole(['ADMIN', 'GERANT', 'CAISSIER']);
+
+    const totalReceipts = transactions
+        .filter(tx => tx.type === 'RECEIPT' && tx.status === 'APPROVED')
+        .reduce((sum, tx) => sum + parseFloat(tx.amount), 0);
+
+    const totalPayments = transactions
+        .filter(tx => tx.type === 'PAYMENT' && tx.status === 'APPROVED')
+        .reduce((sum, tx) => sum + parseFloat(tx.amount), 0);
+
+    return (
+        <div className="space-y-6">
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div className="flex items-center gap-4">
+                    <Link href="/folios" className="btn-icon">
+                        <ArrowLeft size={20} />
+                    </Link>
+                    <div>
+                        <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
+                            {folio.code}
+                            <span className={`badge ${folio.status === 'OPEN' ? 'badge-success' :
+                                folio.status === 'CLOSURE_PROPOSED' ? 'badge-warning' :
+                                    folio.status === 'CLOSED' ? 'badge-info' :
+                                        'badge-neutral'
+                                }`}>
+                                {t(`folio.status_${folio.status}`)}
+                            </span>
+                        </h1>
+                        {folio.branch_name && (
+                            <p className="text-gray-500 dark:text-gray-400">{folio.branch_name}</p>
                         )}
                     </div>
                 </div>
 
-                {/* Transactions Table */}
-                <div className="bg-white shadow-sm ring-1 ring-gray-900/5 sm:rounded-xl">
-                    <div className="px-4 py-5 sm:p-6">
-                        <h3 className="text-base font-semibold leading-6 text-gray-900 mb-4">Transactions</h3>
-                        <div className="overflow-x-auto">
-                            <table className="min-w-full divide-y divide-gray-300">
-                                <thead>
-                                    <tr>
-                                        <th scope="col" className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 sm:pl-0">Date</th>
-                                        <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Type</th>
-                                        <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Montant</th>
-                                        <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Méthode</th>
-                                        <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Référence</th>
-                                        <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Description</th>
-                                        <th scope="col" className="relative py-3.5 pl-3 pr-4 sm:pr-0">
-                                            <span className="sr-only">Actions</span>
-                                        </th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-200">
-                                    {/* Note: In a real app, we need to fetch transactions for this folio. 
-                                        The default ViewSet retrieve might not include them unless nested serializer is used.
-                                        For this demo, assuming they are included or we fetch them separately. 
-                                        Let's assume the serializer includes them for now or we map them if separate.
-                                        If not, the table will be empty.
-                                    */}
-                                    {/* To make this work robustly without changing backend too much, 
-                                        we should probably fetch transactions? 
-                                        Actually, let's assume the backend serializer includes 'transactions' (related_name).
-                                        I didn't add it to FolioSerializer explicitly, but fields='__all__' might include it if it's a field.
-                                        Reverse relations are NOT included by default in ModelSerializer '__all__'.
-                                        I should update the serializer to include it or fetch separately.
-                                        
-                                        Let's update the frontend to fetch transactions separately to be safe.
-                                    */}
-                                </tbody>
-                            </table>
-                            {/* Fetching transactions separately for robustness */}
-                            <TransactionsList folioId={folio.id} onPrint={handlePrintReceipt} />
+                <div className="flex gap-2 flex-wrap">
+                    <button onClick={handlePrintSummary} className="btn-secondary">
+                        <Printer size={18} />
+                        {t('folio.print_summary')}
+                    </button>
+
+                    {canAddTransaction && (
+                        <Link
+                            href={`/transactions/new?folio=${folio.id}`}
+                            className="btn-primary"
+                        >
+                            <Plus size={18} />
+                            {t('transaction.create')}
+                        </Link>
+                    )}
+
+                    {canProposeClosure && (
+                        <button
+                            onClick={() => setIsBilletageModalOpen(true)}
+                            className="btn-secondary"
+                        >
+                            <Send size={18} />
+                            {t('folio.propose_closure')}
+                        </button>
+                    )}
+
+                    {canApproveClosure && (
+                        <>
+                            <button
+                                onClick={() => setClosureModal({ open: true, action: 'approve' })}
+                                className="btn-success"
+                            >
+                                <ThumbsUp size={18} />
+                                {t('folio.approve_closure')}
+                            </button>
+                            <button
+                                onClick={() => setClosureModal({ open: true, action: 'reject' })}
+                                className="btn-danger"
+                            >
+                                <ThumbsDown size={18} />
+                                {t('folio.reject_closure')}
+                            </button>
+                        </>
+                    )}
+                </div>
+            </div>
+
+            {/* Closure Proposed Alert */}
+            {folio.status === 'CLOSURE_PROPOSED' && (
+                <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-2xl p-4 flex items-start gap-4"
+                >
+                    <AlertTriangle className="text-amber-600 flex-shrink-0 mt-0.5" size={20} />
+                    <div>
+                        <h4 className="font-medium text-amber-800 dark:text-amber-400">
+                            Clôture proposée
+                        </h4>
+                        <p className="text-sm text-amber-700 dark:text-amber-300">
+                            Par {folio.closure_proposed_by_name} le {formatDate(folio.closure_proposed_at!)}
+                        </p>
+                        {folio.closure_notes && (
+                            <p className="text-sm text-amber-600 mt-1">{folio.closure_notes}</p>
+                        )}
+                        {folio.actual_physical_balance && (
+                            <p className="text-sm font-semibold text-amber-800 mt-1">
+                                Solde physique déclaré: {formatCurrency(folio.actual_physical_balance)}
+                            </p>
+                        )}
+                    </div>
+                </motion.div>
+            )}
+
+            {/* Stats Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="card p-6">
+                    <div className="flex items-center gap-4">
+                        <div className="p-3 rounded-xl bg-blue-100 text-blue-600 dark:bg-blue-900/30">
+                            <DollarSign size={24} />
+                        </div>
+                        <div>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">{t('folio.opening_balance')}</p>
+                            <p className="text-xl font-bold text-gray-900 dark:text-white">
+                                {formatCurrency(folio.opening_balance)}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="card p-6">
+                    <div className="flex items-center gap-4">
+                        <div className="p-3 rounded-xl bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30">
+                            <TrendingUp size={24} />
+                        </div>
+                        <div>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">{t('transaction.type_RECEIPT')}</p>
+                            <p className="text-xl font-bold text-emerald-600">
+                                +{formatCurrency(totalReceipts)}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="card p-6">
+                    <div className="flex items-center gap-4">
+                        <div className="p-3 rounded-xl bg-red-100 text-red-600 dark:bg-red-900/30">
+                            <TrendingDown size={24} />
+                        </div>
+                        <div>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">{t('transaction.type_PAYMENT')}</p>
+                            <p className="text-xl font-bold text-red-600">
+                                -{formatCurrency(totalPayments)}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="card p-6">
+                    <div className="flex items-center gap-4">
+                        <div className="p-3 rounded-xl bg-blue-100 text-blue-600 dark:bg-blue-900/30">
+                            <DollarSign size={24} />
+                        </div>
+                        <div>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">{t('folio.running_balance')}</p>
+                            <p className="text-xl font-bold text-blue-600">
+                                {formatCurrency(folio.running_balance)}
+                            </p>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <TransactionModal
-                isOpen={isModalOpen}
-                onClose={() => setIsModalOpen(false)}
-                onSubmit={handleAddTransaction}
-                folioId={folio.id}
+            {/* Info Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Folio Info */}
+                <div className="card p-6">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                        Informations
+                    </h3>
+                    <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                            <span className="text-sm text-gray-500">{t('folio.opened_by')}</span>
+                            <span className="font-medium">{folio.opened_by_name}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                            <span className="text-sm text-gray-500">{t('folio.opened_at')}</span>
+                            <span className="font-medium">{formatDate(folio.opened_at)}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                            <span className="text-sm text-gray-500">{t('folio.transactions_count')}</span>
+                            <span className="font-medium">{folio.transaction_count}</span>
+                        </div>
+                        {folio.status === 'CLOSED' && (
+                            <>
+                                <hr className="border-gray-200 dark:border-slate-700" />
+                                <div className="flex items-center justify-between">
+                                    <span className="text-sm text-gray-500">{t('folio.closing_balance')}</span>
+                                    <span className="font-medium">{formatCurrency(folio.closing_balance!)}</span>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                    <span className="text-sm text-gray-500">{t('folio.actual_balance')}</span>
+                                    <span className="font-medium">{formatCurrency(folio.actual_physical_balance || folio.closing_balance!)}</span>
+                                </div>
+                                {folio.variance !== null && folio.variance !== 0 && (
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-sm text-gray-500">{t('folio.variance')}</span>
+                                        <span className={`font-medium ${Math.abs(folio.variance ?? 0) > 100 ? 'text-red-600' : 'text-amber-600'}`}>
+                                            {formatCurrency(folio.variance ?? 0)}
+                                        </span>
+                                    </div>
+                                )}
+                            </>
+                        )}
+                    </div>
+                </div>
+
+                {/* Transactions List */}
+                <div className="lg:col-span-2 card p-6">
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                            Transactions
+                        </h3>
+                        <Link href={`/transactions?folio=${folio.id}`} className="text-sm text-blue-600 hover:text-blue-700">
+                            Voir tout →
+                        </Link>
+                    </div>
+
+                    {transactions.length === 0 ? (
+                        <div className="empty-state py-8">
+                            <FileText className="empty-state-icon" />
+                            <p className="text-gray-500">Aucune transaction</p>
+                        </div>
+                    ) : (
+                        <div className="space-y-3 max-h-96 overflow-y-auto">
+                            {transactions.slice(0, 10).map((tx) => (
+                                <div
+                                    key={tx.id}
+                                    className="flex items-center justify-between p-4 bg-gray-50 dark:bg-slate-700/50 rounded-xl"
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <div className={`p-2 rounded-lg ${tx.type === 'RECEIPT'
+                                            ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30'
+                                            : 'bg-red-100 text-red-600 dark:bg-red-900/30'
+                                            }`}>
+                                            {tx.type === 'RECEIPT' ? <TrendingUp size={18} /> : <TrendingDown size={18} />}
+                                        </div>
+                                        <div>
+                                            <p className="font-medium text-gray-900 dark:text-white">
+                                                {t(`transaction.type_${tx.type}`)}
+                                            </p>
+                                            <p className="text-xs text-gray-500">
+                                                {tx.reference || tx.description || formatDate(tx.created_at)}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className={`font-semibold ${tx.type === 'RECEIPT' ? 'text-emerald-600' : 'text-red-600'
+                                            }`}>
+                                            {tx.type === 'RECEIPT' ? '+' : '-'}{formatCurrency(tx.amount)}
+                                        </p>
+                                        {tx.is_void && (
+                                            <span className="badge badge-danger text-xs">Annulée</span>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* Closure Modal (Approve/Reject) */}
+            {closureModal.open && folio && (
+                <ClosureModal
+                    isOpen={closureModal.open}
+                    folio={folio}
+                    action={closureModal.action}
+                    onClose={() => setClosureModal({ open: false, action: 'approve' })}
+                    onSuccess={fetchData}
+                />
+            )}
+
+            {/* Billetage Modal (Propose) */}
+            <BilletageModal
+                isOpen={isBilletageModalOpen}
+                onClose={() => setIsBilletageModalOpen(false)}
+                onConfirm={handleProposeClosure}
             />
-        </Layout>
-    )
+        </div>
+    );
 }
 
-function TransactionsList({ folioId, onPrint }: { folioId: number, onPrint: (id: number) => void }) {
-    const [transactions, setTransactions] = useState<Transaction[]>([])
-
-    useEffect(() => {
-        const fetchTransactions = async () => {
-            const token = localStorage.getItem('token')
-            // Filter by folio. The ViewSet has filter_backends? 
-            // We didn't add DjangoFilterBackend. 
-            // Let's just fetch all and filter client side for this demo or add filter to backend.
-            // Adding filter to backend is better.
-            // But for now, let's assume we can filter or just fetch all.
-            // Actually, let's just use the nested relation approach by updating the serializer in the next step if needed.
-            // OR, simpler: The backend ViewSet for transactions doesn't have filtering enabled by default.
-            // Let's fetch all and filter in JS (not efficient but works for demo).
-            const res = await fetch('http://localhost:8000/api/transactions/', {
-                headers: { 'Authorization': `Token ${token}` }
-            })
-            const data = await res.json()
-            if (Array.isArray(data)) {
-                setTransactions(data.filter((t: any) => t.folio === folioId))
-            }
-        }
-        fetchTransactions()
-    }, [folioId])
-
-    return (
-        <table className="min-w-full divide-y divide-gray-300">
-            <thead>
-                <tr>
-                    <th scope="col" className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 sm:pl-0">Date</th>
-                    <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Type</th>
-                    <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Montant</th>
-                    <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Méthode</th>
-                    <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Référence</th>
-                    <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Description</th>
-                    <th scope="col" className="relative py-3.5 pl-3 pr-4 sm:pr-0">
-                        <span className="sr-only">Actions</span>
-                    </th>
-                </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-                {transactions.map((transaction) => (
-                    <tr key={transaction.id}>
-                        <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm text-gray-900 sm:pl-0">{new Date(transaction.created_at).toLocaleString()}</td>
-                        <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
-                            <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset ${transaction.type === 'RECEIPT' ? 'bg-green-50 text-green-700 ring-green-600/20' : 'bg-red-50 text-red-700 ring-red-600/20'}`}>
-                                {transaction.type === 'RECEIPT' ? 'Encaissement' : 'Décaissement'}
-                            </span>
-                        </td>
-                        <td className="whitespace-nowrap px-3 py-4 text-sm font-medium text-gray-900">{transaction.amount} MRU</td>
-                        <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{transaction.payment_method}</td>
-                        <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{transaction.reference}</td>
-                        <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{transaction.description}</td>
-                        <td className="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-0">
-                            {transaction.type === 'RECEIPT' && (
-                                <button onClick={() => onPrint(transaction.id)} className="text-indigo-600 hover:text-indigo-900">
-                                    Imprimer<span className="sr-only">, {transaction.id}</span>
-                                </button>
-                            )}
-                        </td>
-                    </tr>
-                ))}
-            </tbody>
-        </table>
-    )
+export async function getServerSideProps({ locale, params }: { locale: string; params: { id: string } }) {
+    return {
+        props: {
+            ...(await serverSideTranslations(locale, ['common'])),
+        },
+    };
 }

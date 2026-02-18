@@ -80,14 +80,14 @@ WSGI_APPLICATION = 'nexasolft.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'mssql',
-        'NAME': os.environ.get('DB_NAME', 'NexasolftTreasury'),
-        'USER': os.environ.get('DB_USER', 'sa'),
-        'PASSWORD': os.environ.get('DB_PASSWORD', 'StrongPassw0rd!123'),
-        'HOST': os.environ.get('DB_HOST', 'db'),
-        'PORT': os.environ.get('DB_PORT', '1433'),
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': 'NexasolftTreasury',
+        'USER': 'root',
+        'PASSWORD': '',
+        'HOST': 'localhost',
+        'PORT': '3306',
         'OPTIONS': {
-            'driver': 'ODBC Driver 17 for SQL Server',
+            'charset': 'utf8mb4',
         },
     }
 }

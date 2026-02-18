@@ -1,139 +1,423 @@
-import Layout from '../../components/Layout'
-import { useEffect, useState } from 'react'
-import Link from 'next/link'
-import { useRouter } from 'next/router'
+import { useState, useEffect } from 'react';
+import { useTranslation } from 'next-i18next';
+import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
+import { motion } from 'framer-motion';
+import Link from 'next/link';
+import {
+    Plus, Search, Filter, FolderOpen, Clock,
+    CheckCircle, AlertTriangle, Archive, Eye,
+    ChevronRight, Calendar, User, DollarSign,
+    FileText, XCircle, RefreshCw
+} from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
+import { folioApi, Folio } from '../../services/api';
 
-interface Folio {
-    id: number;
-    code: string;
-    opened_by: number; // In real app, expand to user object or name
-    opened_at: string;
-    opening_balance: string;
-    status: string;
-    closed_at: string | null;
-    closing_balance: string | null;
+// Status badge colors
+const statusColors: Record<string, { bg: string; text: string; badge: string }> = {
+    DRAFT: { bg: 'bg-gray-100 dark:bg-gray-800', text: 'text-gray-600 dark:text-gray-400', badge: 'badge-neutral' },
+    OPEN: { bg: 'bg-emerald-100 dark:bg-emerald-900/30', text: 'text-emerald-600', badge: 'badge-success' },
+    CLOSURE_PROPOSED: { bg: 'bg-amber-100 dark:bg-amber-900/30', text: 'text-amber-600', badge: 'badge-warning' },
+    CLOSED: { bg: 'bg-blue-100 dark:bg-blue-900/30', text: 'text-blue-600', badge: 'badge-info' },
+    ARCHIVED: { bg: 'bg-gray-200 dark:bg-gray-700', text: 'text-gray-500', badge: 'badge-neutral' },
+};
+
+// Create Folio Modal
+interface CreateFolioModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    onSuccess: () => void;
 }
 
-export default function Folios() {
-    const [folios, setFolios] = useState<Folio[]>([])
-    const [loading, setLoading] = useState(true)
-    const [error, setError] = useState('')
-    const router = useRouter()
+function CreateFolioModal({ isOpen, onClose, onSuccess }: CreateFolioModalProps) {
+    const { t } = useTranslation('common');
+    const [openingBalance, setOpeningBalance] = useState('0');
+    const [notes, setNotes] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
 
-    useEffect(() => {
-        fetchFolios()
-    }, [])
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setError('');
+        setLoading(true);
 
-    const fetchFolios = async () => {
         try {
-            const token = localStorage.getItem('token')
-            const res = await fetch('http://localhost:8000/api/folios/', {
-                headers: { 'Authorization': `Token ${token}` }
-            })
-            const data = await res.json()
-            if (Array.isArray(data)) {
-                setFolios(data)
-            }
-        } catch (error) {
-            console.error("Error fetching folios:", error)
-        } finally {
-            setLoading(false)
-        }
-    }
+            const result = await folioApi.create({
+                opening_balance: parseFloat(openingBalance) || 0,
+                notes: notes || undefined,
+            });
 
-    const handleOpenFolio = async () => {
-        setError('')
-        try {
-            const token = localStorage.getItem('token')
-            const res = await fetch('http://localhost:8000/api/folios/', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Token ${token}`
-                },
-                body: JSON.stringify({ opening_balance: 0 }) // Default 0, could prompt user
-            })
-            const data = await res.json()
-
-            if (data.success) {
-                router.push(`/folios/${data.folio.id}`)
+            if (result.success) {
+                onSuccess();
+                onClose();
+                setOpeningBalance('0');
+                setNotes('');
             } else {
-                setError(data.message || "Impossible d'ouvrir un nouveau folio")
+                setError(result.message || 'Error creating folio');
             }
-        } catch (error) {
-            setError("Erreur lors de l'ouverture du folio")
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Error creating folio');
+        } finally {
+            setLoading(false);
         }
-    }
+    };
+
+    if (!isOpen) return null;
 
     return (
-        <Layout title="Folios - NexaSolft">
-            <div className="space-y-6">
-                <div className="md:flex md:items-center md:justify-between">
-                    <div className="min-w-0 flex-1">
-                        <h2 className="text-2xl font-bold leading-7 text-gray-900 sm:truncate sm:text-3xl sm:tracking-tight">
-                            Liste des Folios
-                        </h2>
-                    </div>
-                    <div className="mt-4 flex md:ml-4 md:mt-0">
-                        <button
-                            onClick={handleOpenFolio}
-                            type="button"
-                            className="inline-flex items-center rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
-                        >
-                            Ouvrir un Folio
-                        </button>
-                    </div>
-                </div>
+        <div className="modal-overlay" onClick={onClose}>
+            <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="modal-content"
+                onClick={(e) => e.stopPropagation()}
+            >
+                <div className="p-6">
+                    <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-6">
+                        {t('folio.create')}
+                    </h2>
 
-                {error && (
-                    <div className="rounded-md bg-red-50 p-4">
-                        <div className="flex">
-                            <div className="ml-3">
-                                <h3 className="text-sm font-medium text-red-800">{error}</h3>
+                    {error && (
+                        <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl text-red-700 dark:text-red-400 text-sm">
+                            {error}
+                        </div>
+                    )}
+
+                    <form onSubmit={handleSubmit} className="space-y-4">
+                        <div>
+                            <label className="label">{t('folio.opening_balance')}</label>
+                            <div className="relative">
+                                <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                                <input
+                                    type="number"
+                                    value={openingBalance}
+                                    onChange={(e) => setOpeningBalance(e.target.value)}
+                                    className="input pl-12"
+                                    placeholder="0.00"
+                                    min="0"
+                                    step="0.01"
+                                />
                             </div>
                         </div>
-                    </div>
-                )}
 
-                <div className="bg-white shadow-sm ring-1 ring-gray-900/5 sm:rounded-xl md:col-span-2">
-                    <table className="min-w-full divide-y divide-gray-300">
-                        <thead>
-                            <tr>
-                                <th scope="col" className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 sm:pl-6">Code</th>
-                                <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Ouvert le</th>
-                                <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Solde Ouverture</th>
-                                <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Statut</th>
-                                <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Fermé le</th>
-                                <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Solde Clôture</th>
-                                <th scope="col" className="relative py-3.5 pl-3 pr-4 sm:pr-6">
-                                    <span className="sr-only">Actions</span>
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-200">
-                            {folios.map((folio) => (
-                                <tr key={folio.id}>
-                                    <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6">{folio.code}</td>
-                                    <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{new Date(folio.opened_at).toLocaleDateString()}</td>
-                                    <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{folio.opening_balance}</td>
-                                    <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
-                                        <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset ${folio.status === 'OPEN' ? 'bg-green-50 text-green-700 ring-green-600/20' : 'bg-gray-50 text-gray-600 ring-gray-500/10'}`}>
-                                            {folio.status}
-                                        </span>
-                                    </td>
-                                    <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{folio.closed_at ? new Date(folio.closed_at).toLocaleDateString() : '-'}</td>
-                                    <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{folio.closing_balance || '-'}</td>
-                                    <td className="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
-                                        <Link href={`/folios/${folio.id}`} className="text-blue-600 hover:text-blue-900">
-                                            Voir détails<span className="sr-only">, {folio.code}</span>
-                                        </Link>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                        <div>
+                            <label className="label">{t('folio.notes')}</label>
+                            <textarea
+                                value={notes}
+                                onChange={(e) => setNotes(e.target.value)}
+                                className="input"
+                                rows={3}
+                                placeholder="Notes optionnelles..."
+                            />
+                        </div>
+
+                        <div className="flex gap-3 pt-4">
+                            <button
+                                type="button"
+                                onClick={onClose}
+                                className="btn-secondary flex-1"
+                                disabled={loading}
+                            >
+                                {t('common.cancel')}
+                            </button>
+                            <button
+                                type="submit"
+                                className="btn-primary flex-1"
+                                disabled={loading}
+                            >
+                                {loading ? (
+                                    <span className="flex items-center justify-center gap-2">
+                                        <span className="spinner" />
+                                        {t('common.loading')}
+                                    </span>
+                                ) : (
+                                    t('common.create')
+                                )}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </motion.div>
+        </div>
+    );
+}
+
+export default function FoliosPage() {
+    const { t } = useTranslation('common');
+    const { user, hasRole } = useAuth();
+
+    const [folios, setFolios] = useState<Folio[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [statusFilter, setStatusFilter] = useState<string>('');
+    const [searchQuery, setSearchQuery] = useState('');
+    const [createModalOpen, setCreateModalOpen] = useState(false);
+
+    const fetchFolios = async () => {
+        setLoading(true);
+        try {
+            const data = await folioApi.list(statusFilter ? { status: statusFilter } : undefined);
+            setFolios(data);
+        } catch (error) {
+            console.error('Error fetching folios:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchFolios();
+    }, [statusFilter]);
+
+    const filteredFolios = folios.filter(folio => {
+        if (!searchQuery) return true;
+        const query = searchQuery.toLowerCase();
+        return (
+            folio.code.toLowerCase().includes(query) ||
+            folio.opened_by_name?.toLowerCase().includes(query) ||
+            folio.branch_name?.toLowerCase().includes(query)
+        );
+    });
+
+    const formatCurrency = (amount: string | number) => {
+        const num = typeof amount === 'string' ? parseFloat(amount) : amount;
+        return new Intl.NumberFormat('fr-FR', {
+            style: 'decimal',
+            minimumFractionDigits: 2,
+        }).format(num) + ' MRU';
+    };
+
+    const formatDate = (dateString: string) => {
+        return new Date(dateString).toLocaleDateString('fr-FR', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+        });
+    };
+
+    const canCreateFolio = hasRole(['ADMIN', 'GERANT', 'CAISSIER']);
+
+    return (
+        <div className="space-y-6">
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div>
+                    <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+                        {t('folio.title')}
+                    </h1>
+                    <p className="text-gray-500 dark:text-gray-400">
+                        Gérez vos folios de caisse et suivez les transactions
+                    </p>
+                </div>
+
+                {canCreateFolio && (
+                    <button
+                        onClick={() => setCreateModalOpen(true)}
+                        className="btn-primary"
+                    >
+                        <Plus size={18} />
+                        {t('folio.create')}
+                    </button>
+                )}
+            </div>
+
+            {/* Filters */}
+            <div className="card p-4">
+                <div className="flex flex-col sm:flex-row gap-4">
+                    {/* Search */}
+                    <div className="flex-1 relative">
+                        <Search className="absolute left-4 rtl:left-auto rtl:right-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                        <input
+                            type="text"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="input pl-12 rtl:pl-4 rtl:pr-12"
+                            placeholder="Rechercher par code, utilisateur..."
+                        />
+                    </div>
+
+                    {/* Status Filter */}
+                    <div className="flex gap-2 flex-wrap">
+                        <button
+                            onClick={() => setStatusFilter('')}
+                            className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${!statusFilter
+                                ? 'bg-blue-500 text-white'
+                                : 'bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-slate-600'
+                                }`}
+                        >
+                            Tous
+                        </button>
+                        {['OPEN', 'CLOSURE_PROPOSED', 'CLOSED'].map((status) => (
+                            <button
+                                key={status}
+                                onClick={() => setStatusFilter(status)}
+                                className={`px-4 py-2 rounded-xl text-sm font-medium transition-all flex items-center gap-2 ${statusFilter === status
+                                    ? 'bg-blue-500 text-white'
+                                    : 'bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-slate-600'
+                                    }`}
+                            >
+                                {status === 'OPEN' && <FolderOpen size={14} />}
+                                {status === 'CLOSURE_PROPOSED' && <Clock size={14} />}
+                                {status === 'CLOSED' && <CheckCircle size={14} />}
+                                {t(`folio.status_${status}`)}
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* Refresh */}
+                    <button
+                        onClick={fetchFolios}
+                        className="btn-icon"
+                        title={t('common.refresh')}
+                    >
+                        <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
+                    </button>
                 </div>
             </div>
-        </Layout>
-    )
+
+            {/* Folios Grid */}
+            {loading ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {[1, 2, 3, 4, 5, 6].map((i) => (
+                        <div key={i} className="card p-6">
+                            <div className="space-y-4">
+                                <div className="skeleton h-6 w-3/4 rounded" />
+                                <div className="skeleton h-4 w-1/2 rounded" />
+                                <div className="skeleton h-20 rounded" />
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            ) : filteredFolios.length === 0 ? (
+                <div className="card p-12">
+                    <div className="empty-state">
+                        <FolderOpen className="empty-state-icon" />
+                        <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                            Aucun folio trouvé
+                        </h3>
+                        <p className="text-gray-500 dark:text-gray-400 mb-4">
+                            {statusFilter
+                                ? `Aucun folio avec le statut "${t(`folio.status_${statusFilter}`)}"`
+                                : 'Commencez par créer un nouveau folio'
+                            }
+                        </p>
+                        {canCreateFolio && !statusFilter && (
+                            <button
+                                onClick={() => setCreateModalOpen(true)}
+                                className="btn-primary"
+                            >
+                                <Plus size={18} />
+                                {t('folio.create')}
+                            </button>
+                        )}
+                    </div>
+                </div>
+            ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {filteredFolios.map((folio, index) => (
+                        <motion.div
+                            key={folio.id}
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: index * 0.05 }}
+                        >
+                            <Link href={`/folios/${folio.id}`}>
+                                <div className="card-hover p-6 h-full">
+                                    {/* Header */}
+                                    <div className="flex items-start justify-between mb-4">
+                                        <div>
+                                            <h3 className="font-semibold text-gray-900 dark:text-white text-lg">
+                                                {folio.code}
+                                            </h3>
+                                            {folio.branch_name && (
+                                                <p className="text-sm text-gray-500 dark:text-gray-400">
+                                                    {folio.branch_name}
+                                                </p>
+                                            )}
+                                        </div>
+                                        <span className={`badge ${statusColors[folio.status]?.badge || 'badge-neutral'}`}>
+                                            {t(`folio.status_${folio.status}`)}
+                                        </span>
+                                    </div>
+
+                                    {/* Stats */}
+                                    <div className="space-y-3 mb-4">
+                                        <div className="flex items-center justify-between text-sm">
+                                            <span className="text-gray-500 dark:text-gray-400 flex items-center gap-2">
+                                                <DollarSign size={14} />
+                                                {t('folio.opening_balance')}
+                                            </span>
+                                            <span className="font-medium text-gray-900 dark:text-white">
+                                                {formatCurrency(folio.opening_balance)}
+                                            </span>
+                                        </div>
+
+                                        <div className="flex items-center justify-between text-sm">
+                                            <span className="text-gray-500 dark:text-gray-400 flex items-center gap-2">
+                                                <DollarSign size={14} />
+                                                {t('folio.running_balance')}
+                                            </span>
+                                            <span className="font-semibold text-blue-600">
+                                                {formatCurrency(folio.running_balance)}
+                                            </span>
+                                        </div>
+
+                                        <div className="flex items-center justify-between text-sm">
+                                            <span className="text-gray-500 dark:text-gray-400 flex items-center gap-2">
+                                                <FileText size={14} />
+                                                {t('folio.transactions_count')}
+                                            </span>
+                                            <span className="font-medium text-gray-900 dark:text-white">
+                                                {folio.transaction_count}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    {/* Footer */}
+                                    <div className="pt-4 border-t border-gray-200 dark:border-slate-700">
+                                        <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
+                                            <span className="flex items-center gap-1">
+                                                <User size={12} />
+                                                {folio.opened_by_name}
+                                            </span>
+                                            <span className="flex items-center gap-1">
+                                                <Calendar size={12} />
+                                                {formatDate(folio.opened_at)}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    {/* Variance Warning */}
+                                    {folio.status === 'CLOSED' && folio.variance != null && folio.variance !== 0 && (
+                                        <div className={`mt-3 p-2 rounded-lg text-xs flex items-center gap-2 ${Math.abs(folio.variance ?? 0) > 100
+                                            ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                                            : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                                            }`}>
+                                            <AlertTriangle size={14} />
+                                            Écart: {formatCurrency(folio.variance)}
+                                        </div>
+                                    )}
+                                </div>
+                            </Link>
+                        </motion.div>
+                    ))}
+                </div>
+            )}
+
+            {/* Create Modal */}
+            <CreateFolioModal
+                isOpen={createModalOpen}
+                onClose={() => setCreateModalOpen(false)}
+                onSuccess={fetchFolios}
+            />
+        </div>
+    );
+}
+
+export async function getStaticProps({ locale }: { locale: string }) {
+    return {
+        props: {
+            ...(await serverSideTranslations(locale, ['common'])),
+        },
+    };
 }
