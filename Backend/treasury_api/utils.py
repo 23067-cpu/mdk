@@ -6,6 +6,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 def _send_email_thread(subject, message, recipient_list):
     try:
         send_mail(
@@ -20,9 +21,28 @@ def _send_email_thread(subject, message, recipient_list):
         logger.error(f"Failed to send email to {recipient_list}: {str(e)}")
 
 
+def get_admin_emails():
+    """
+    Dynamically fetches the email(s) of all active ADMIN users from the database.
+    Returns a list of email strings. Falls back to an empty list if none found.
+    """
+    try:
+        from .models import User
+        emails = list(
+            User.objects.filter(role='ADMIN', is_active=True)
+            .exclude(email='')
+            .values_list('email', flat=True)
+        )
+        return emails if emails else []
+    except Exception as e:
+        logger.error(f"Error fetching admin emails: {str(e)}")
+        return []
+
+
 def send_smart_alert(action_type, context_data):
     """
     Sends an email alert if the system settings permit it for the given action_type.
+    Recipients are dynamically read from ADMIN users in the database.
     action_type can be: 'high_value_transaction', 'folio_closure', 'settlement_approval'
     context_data is a dict containing details to format the email message.
     """
@@ -32,8 +52,13 @@ def send_smart_alert(action_type, context_data):
             return
 
         config = notifications_setting.value
-        recipient_email = '23067@supnum.mr'  # As requested by the user
-        
+
+        # Dynamically get admin email(s) — follows whoever is the ADMIN in the system
+        recipient_emails = get_admin_emails()
+        if not recipient_emails:
+            logger.warning("No admin email addresses found — skipping alert.")
+            return
+
         subject = ""
         message = ""
         should_send = False
@@ -46,7 +71,7 @@ def send_smart_alert(action_type, context_data):
                 subject = "🚨 Alerte : Transaction de valeur élevée"
                 message = (
                     f"Une transaction de valeur élevée a été enregistrée.\n\n"
-                    f"Montant : {amount}\n"
+                    f"Montant : {amount:,.2f} MRU\n"
                     f"Auteur : {context_data.get('user')}\n"
                     f"Folio : {context_data.get('folio')}\n"
                 )
@@ -75,7 +100,10 @@ def send_smart_alert(action_type, context_data):
 
         if should_send and subject and message:
             # Send asynchronously to prevent blocking the API request
-            thread = threading.Thread(target=_send_email_thread, args=(subject, message, [recipient_email]))
+            thread = threading.Thread(
+                target=_send_email_thread,
+                args=(subject, message, recipient_emails)
+            )
             thread.start()
 
     except Exception as e:
