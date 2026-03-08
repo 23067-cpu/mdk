@@ -148,7 +148,8 @@
     "request_void": "Request void",
     "confirm_approve_title": "Confirm Approval",
     "confirm_reject_title": "Confirm Rejection",
-    "confirm_action_desc": "This action cannot be undone."
+    "confirm_action_desc": "This action cannot be undone.",
+    "requires_admin_approval": "This transaction requires Administrator approval only"
   },
   "settlement": {
     "title": "Settlements",

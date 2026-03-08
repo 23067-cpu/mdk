@@ -148,7 +148,8 @@
     "request_void": "Demander annulation",
     "confirm_approve_title": "Confirmer l'approbation",
     "confirm_reject_title": "Confirmer le refus",
-    "confirm_action_desc": "Cette action est irréversible."
+    "confirm_action_desc": "Cette action est irréversible.",
+    "requires_admin_approval": "Cette transaction nécessite l'approbation de l'Administrateur uniquement"
   },
   "settlement": {
     "title": "Règlements",

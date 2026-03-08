@@ -1088,11 +1088,13 @@ class TransactionViewSet(viewsets.ModelViewSet):
             })
             
             if requires_approval:
-                # Notify approvers
-                approvers = User.objects.filter(
-                    role__in=['ADMIN', 'GERANT'],
-                    is_active=True
-                )
+                # Only notify ADMINs if it's an admin-level transaction,
+                # otherwise notify both ADMIN and GERANT
+                if requires_admin:
+                    approvers = User.objects.filter(role='ADMIN', is_active=True)
+                else:
+                    approvers = User.objects.filter(role__in=['ADMIN', 'GERANT'], is_active=True)
+                
                 for approver in approvers:
                     Notification.objects.create(
                         user=approver,
@@ -1100,7 +1102,11 @@ class TransactionViewSet(viewsets.ModelViewSet):
                         priority='HIGH',
                         title='NOTIF_TX_APPROVAL_TITLE',
                         message='NOTIF_TX_APPROVAL_MSG',
-                        action_data={'amount': str(amount), 'user': request.user.get_full_name() or request.user.username},
+                        action_data={
+                            'amount': str(amount),
+                            'user': request.user.get_full_name() or request.user.username,
+                            'admin_only': requires_admin
+                        },
                         action_url='/transactions'
                     )
         
@@ -1157,9 +1163,9 @@ class TransactionViewSet(viewsets.ModelViewSet):
                 user=transaction.created_by,
                 notification_type='GENERAL',
                 priority='LOW',
-                title='Transaction approuvée',
-                message=f'Votre transaction de {transaction.amount} MRU a été approuvée.',
-                action_data={'ref': str(transaction.id)[:8]},
+                title='NOTIF_TX_APPROVED_TITLE',
+                message='NOTIF_TX_APPROVED_MSG',
+                action_data={'ref': str(transaction.id)[:8], 'amount': str(transaction.amount)},
                 action_url='/transactions'
             )
             
@@ -1186,7 +1192,17 @@ class TransactionViewSet(viewsets.ModelViewSet):
                 'message': 'Non autorisé'
             }, status=status.HTTP_403_FORBIDDEN)
             
-        with db_transaction.atomic():
+        # Check if this is an admin-only transaction
+        approval_settings = SystemSettings.objects.filter(key='approval').first()
+        if approval_settings and isinstance(approval_settings.value, dict):
+            admin_limit = float(approval_settings.value.get('admin_transaction_threshold', 0))
+            if admin_limit > 0 and float(transaction.amount) >= admin_limit:
+                if request.user.role != 'ADMIN':
+                    return Response({
+                        'success': False,
+                        'message': f'Cette transaction nécessite l\'autorisation d\'un Administrateur.'
+                    }, status=status.HTTP_403_FORBIDDEN)
+
             transaction.status = 'REJECTED'
             transaction.save()
             

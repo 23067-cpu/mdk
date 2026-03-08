@@ -647,25 +647,32 @@ export default function TransactionsPage() {
                                                     </>
                                                 )}
                                                 {/* Approve / Reject pending transaction (Admin/GERANT, no void) */}
-                                                {canApproveVoid && tx.status === 'PENDING' && !tx.void_requested_by && (
-                                                    <>
-                                                        <button
-                                                            onClick={() => handleApproveTransaction(tx)}
-                                                            className="btn-icon text-emerald-600 hover:bg-emerald-50"
-                                                            title="Approuver la transaction"
-                                                            id={`approve-tx-btn-${tx.id}`}
-                                                        >
-                                                            <CheckCircle size={16} />
-                                                        </button>
-                                                        <button
-                                                            onClick={() => handleRejectTransaction(tx)}
-                                                            className="btn-icon text-red-600 hover:bg-red-50"
-                                                            title="Refuser la transaction"
-                                                            id={`reject-tx-btn-${tx.id}`}
-                                                        >
-                                                            <XCircle size={16} />
-                                                        </button>
-                                                    </>
+                                                {tx.status === 'PENDING' && !tx.void_requested_by && canApproveVoid && (
+                                                    tx.requires_admin && !hasRole(['ADMIN']) ? (
+                                                        // GERANT sees this badge but NO action buttons
+                                                        <span className="badge badge-warning text-xs" title={t('transaction.requires_admin_approval')}>
+                                                            🔒 Admin
+                                                        </span>
+                                                    ) : (
+                                                        <>
+                                                            <button
+                                                                onClick={() => handleApproveTransaction(tx)}
+                                                                className="btn-icon text-emerald-600 hover:bg-emerald-50"
+                                                                title={t('transaction.confirm_approve_title')}
+                                                                id={`approve-tx-btn-${tx.id}`}
+                                                            >
+                                                                <CheckCircle size={16} />
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleRejectTransaction(tx)}
+                                                                className="btn-icon text-red-600 hover:bg-red-50"
+                                                                title={t('transaction.confirm_reject_title')}
+                                                                id={`reject-tx-btn-${tx.id}`}
+                                                            >
+                                                                <XCircle size={16} />
+                                                            </button>
+                                                        </>
+                                                    )
                                                 )}
                                                 {/* Void button: direct for Admin/GERANT, request for others */}
                                                 {canVoid && tx.status === 'APPROVED' && !tx.is_void && (

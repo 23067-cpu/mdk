@@ -148,7 +148,8 @@
     "request_void": "طلب الإلغاء",
     "confirm_approve_title": "تأكيد الموافقة على المعاملة",
     "confirm_reject_title": "تأكيد رفض المعاملة",
-    "confirm_action_desc": "هذا الإجراء لا يمكن التراجع عنه."
+    "confirm_action_desc": "هذا الإجراء لا يمكن التراجع عنه.",
+    "requires_admin_approval": "تتطلب هذه المعاملة موافقة المسؤول فقط"
   },
   "settlement": {
     "title": "التسويات",
@@ -505,13 +506,13 @@
     "default_currency": "العملة الافتراضية",
     "approval_rules": "قواعد الموافقة",
     "approval_threshold": "الحد الأقصى للموافقة على المعاملات",
-    "approval_threshold_help": "المعاملات التي تتجاوز هذا المبلغ تتطلب موافقة الجاره",
+    "approval_threshold_help": "المعاملات التي تتجاوز هذا المبلغ تتطلب موافقة المسؤول",
     "approval_admin_threshold": "حد الإداري (Admin Threshold)",
     "approval_admin_threshold_help": "فقط الإداري يمكنه الموافقة على المعاملات التي تبلغ هذا الحد أو تتجاوزه",
     "approval_settlement": "الموافقة على التسويات",
-    "approval_settlement_help": "طلب موافقة الجاره على التسويات",
+    "approval_settlement_help": "طلب موافقة المسؤول على التسويات",
     "approval_folio": "الموافقة على إغلاق الفوليو",
-    "approval_folio_help": "طلب موافقة الجاره لإغلاق الفوليو",
+    "approval_folio_help": "طلب موافقة المسؤول لإغلاق الفوليو",
     "security_settings": "إعدادات الأمان",
     "security_timeout": "مهلة الجلسة (دقائق)",
     "security_max_attempts": "أقصى عدد لمحاولات تسجيل الدخول",

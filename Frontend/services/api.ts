@@ -78,6 +78,7 @@ export interface Transaction {
     status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'VOID';
     status_display: string;
     requires_approval: boolean;
+    requires_admin?: boolean;
     approved_by?: number;
     approved_by_name?: string;
     is_void: boolean;
