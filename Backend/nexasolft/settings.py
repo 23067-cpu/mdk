@@ -142,10 +142,11 @@ EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
-EMAIL_HOST_USER = os.environ.get('GMAIL_USER', '23067@supnum.mr')
+EMAIL_HOST_USER = os.environ.get('GMAIL_USER', 'rimkyc7@gmail.com')
 EMAIL_HOST_PASSWORD = os.environ.get('GMAIL_APP_PASSWORD', 'cabrvmcdlbybwzpa')
 DEFAULT_FROM_EMAIL = f'NexaSolft System <{EMAIL_HOST_USER}>'
 
 # Session timeout default (minutes) – overridden by SystemSettings
 SESSION_TIMEOUT_MINUTES = int(os.environ.get('SESSION_TIMEOUT_MINUTES', 60))
+
 
