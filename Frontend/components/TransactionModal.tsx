@@ -1,142 +1,244 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react';
+import { useTranslation } from 'next-i18next';
+import { motion } from 'framer-motion';
+import { TrendingUp, TrendingDown } from 'lucide-react';
+import { transactionApi, folioApi, Folio } from '../services/api';
+
+const paymentMethodIcons: Record<string, string> = {
+    CASH: '💵',
+    CARD: '💳',
+    TRANSFER: '🏦',
+    CHECK: '📝',
+    MOBILE: '📱',
+    OTHER: '📋',
+};
 
 interface TransactionModalProps {
     isOpen: boolean;
+    defaultType?: 'RECEIPT' | 'PAYMENT';
+    folioId?: number;
     onClose: () => void;
-    onSubmit: (data: any) => void;
-    folioId: number;
+    onSuccess: () => void;
 }
 
-export default function TransactionModal({ isOpen, onClose, onSubmit, folioId }: TransactionModalProps) {
-    const [type, setType] = useState('RECEIPT')
-    const [amount, setAmount] = useState('')
-    const [paymentMethod, setPaymentMethod] = useState('CASH')
-    const [reference, setReference] = useState('')
-    const [description, setDescription] = useState('')
+export default function TransactionModal({ isOpen, defaultType, folioId, onClose, onSuccess }: TransactionModalProps) {
+    const { t } = useTranslation('common');
+    const [type, setType] = useState<'RECEIPT' | 'PAYMENT'>(defaultType || 'RECEIPT');
+    const [amount, setAmount] = useState('');
+    const [paymentMethod, setPaymentMethod] = useState('CASH');
+    const [reference, setReference] = useState('');
+    const [description, setDescription] = useState('');
+    const [clientName, setClientName] = useState('');
+    const [selectedFolio, setSelectedFolio] = useState<number | null>(folioId || null);
+    const [folios, setFolios] = useState<Folio[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
 
-    if (!isOpen) return null
+    useEffect(() => {
+        if (isOpen) {
+            folioApi.list({ status: 'OPEN' }).then(setFolios).catch(console.error);
+            if (defaultType) setType(defaultType);
+            if (folioId) setSelectedFolio(folioId);
 
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault()
-        onSubmit({
-            folio: folioId,
-            type,
-            amount: parseFloat(amount),
-            payment_method: paymentMethod,
-            reference,
-            description
-        })
-        // Reset form
-        setAmount('')
-        setReference('')
-        setDescription('')
-    }
+            // Auto-generate reference in the background
+            if (!reference) {
+                const today = new Date();
+                const yyyy = today.getFullYear();
+                const mm = String(today.getMonth() + 1).padStart(2, '0');
+                const dd = String(today.getDate()).padStart(2, '0');
+                const randomCode = Math.floor(1000 + Math.random() * 9000);
+                setReference(`FAC-${yyyy}${mm}${dd}-${randomCode}`);
+            }
+        }
+    }, [isOpen, defaultType, folioId]);
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!selectedFolio) {
+            setError('Veuillez sélectionner un folio');
+            return;
+        }
+
+        setError('');
+        setLoading(true);
+
+        try {
+            const result = await transactionApi.create({
+                folio: selectedFolio,
+                type,
+                amount: parseFloat(amount),
+                payment_method: paymentMethod,
+                reference: reference || undefined,
+                description: description || undefined,
+                client_name: type === 'RECEIPT' ? clientName || undefined : undefined,
+                supplier_name: type === 'PAYMENT' ? clientName || undefined : undefined,
+            });
+
+            if (result.success) {
+                onSuccess();
+                onClose();
+                // Reset form
+                setAmount('');
+                setReference('');
+                setDescription('');
+                setClientName('');
+            } else {
+                setError(result.message || 'Error');
+            }
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Error');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-10 overflow-y-auto">
-            <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
-                <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={onClose}></div>
+        <div className="modal-overlay" onClick={onClose}>
+            <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="modal-content max-w-xl"
+                onClick={(e) => e.stopPropagation()}
+            >
+                <div className="p-6">
+                    <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-6">
+                        {t('transaction.create')}
+                    </h2>
 
-                <div className="relative transform overflow-hidden rounded-lg bg-white px-4 pb-4 pt-5 text-left rtl:text-right shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg sm:p-6">
-                    <div className="absolute right-0 rtl:right-auto rtl:left-0 top-0 hidden pr-4 rtl:pr-0 rtl:pl-4 pt-4 sm:block">
-                        <button
-                            type="button"
-                            className="rounded-md bg-white text-gray-400 hover:text-gray-500 focus:outline-none"
-                            onClick={onClose}
-                        >
-                            <span className="sr-only">Fermer</span>
-                            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                        </button>
-                    </div>
+                    {error && (
+                        <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 rounded-xl text-red-700 text-sm">
+                            {error}
+                        </div>
+                    )}
 
-                    <div className="sm:flex sm:items-start">
-                        <div className="mt-3 text-center sm:ml-4 rtl:sm:ml-0 rtl:sm:mr-4 sm:mt-0 sm:text-left rtl:sm:text-right w-full">
-                            <h3 className="text-base font-semibold leading-6 text-gray-900">
-                                Nouvelle Transaction
-                            </h3>
-                            <div className="mt-2">
-                                <form onSubmit={handleSubmit} className="space-y-4">
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700">Type</label>
-                                        <select
-                                            value={type}
-                                            onChange={(e) => setType(e.target.value)}
-                                            className="mt-1 block w-full rounded-md border-gray-300 py-2 pl-3 pr-10 text-base focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
-                                        >
-                                            <option value="RECEIPT">Encaissement (Receipt)</option>
-                                            <option value="PAYMENT">Décaissement (Payment)</option>
-                                        </select>
-                                    </div>
+                    <form onSubmit={handleSubmit} className="space-y-4">
+                        {/* Transaction Type */}
+                        <div className="grid grid-cols-2 gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setType('RECEIPT')}
+                                className={`p-4 rounded-xl border-2 flex items-center justify-center gap-2 transition-all ${type === 'RECEIPT'
+                                    ? 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20'
+                                    : 'border-gray-200 dark:border-slate-700 hover:border-gray-300'
+                                    }`}
+                            >
+                                <TrendingUp size={20} />
+                                {t('transaction.type_RECEIPT')}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setType('PAYMENT')}
+                                className={`p-4 rounded-xl border-2 flex items-center justify-center gap-2 transition-all ${type === 'PAYMENT'
+                                    ? 'border-red-500 bg-red-50 text-red-700 dark:bg-red-900/20'
+                                    : 'border-gray-200 dark:border-slate-700 hover:border-gray-300'
+                                    }`}
+                            >
+                                <TrendingDown size={20} />
+                                {t('transaction.type_PAYMENT')}
+                            </button>
+                        </div>
 
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700">Montant</label>
-                                        <input
-                                            type="number"
-                                            step="0.01"
-                                            required
-                                            value={amount}
-                                            onChange={(e) => setAmount(e.target.value)}
-                                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2 border"
-                                        />
-                                    </div>
+                        {/* Folio Selection */}
+                        {!folioId && (
+                            <div>
+                                <label className="label">Folio *</label>
+                                <select
+                                    value={selectedFolio || ''}
+                                    onChange={(e) => setSelectedFolio(Number(e.target.value))}
+                                    className="select"
+                                    required
+                                >
+                                    <option value="">Sélectionnez un folio</option>
+                                    {folios.map((folio) => (
+                                        <option key={folio.id} value={folio.id}>
+                                            {folio.code} - {folio.running_balance.toFixed(2)} MRU
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
 
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700">Méthode de paiement</label>
-                                        <select
-                                            value={paymentMethod}
-                                            onChange={(e) => setPaymentMethod(e.target.value)}
-                                            className="mt-1 block w-full rounded-md border-gray-300 py-2 pl-3 pr-10 text-base focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
-                                        >
-                                            <option value="CASH">Espèces</option>
-                                            <option value="CARD">Carte Bancaire</option>
-                                            <option value="TRANSFER">Virement</option>
-                                            <option value="CHEQUE">Chèque</option>
-                                        </select>
-                                    </div>
+                        {/* Amount */}
+                        <div>
+                            <label className="label">{t('transaction.amount')} *</label>
+                            <input
+                                type="number"
+                                value={amount}
+                                onChange={(e) => setAmount(e.target.value)}
+                                className="input"
+                                placeholder="0.00"
+                                min="0.01"
+                                step="0.01"
+                                required
+                            />
+                        </div>
 
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700">Référence</label>
-                                        <input
-                                            type="text"
-                                            value={reference}
-                                            onChange={(e) => setReference(e.target.value)}
-                                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2 border"
-                                        />
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700">Description</label>
-                                        <textarea
-                                            value={description}
-                                            onChange={(e) => setDescription(e.target.value)}
-                                            rows={3}
-                                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2 border"
-                                        />
-                                    </div>
-
-                                    <div className="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse">
-                                        <button
-                                            type="submit"
-                                            className="inline-flex w-full justify-center rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-500 sm:ml-3 sm:w-auto"
-                                        >
-                                            Enregistrer
-                                        </button>
-                                        <button
-                                            type="button"
-                                            className="mt-3 inline-flex w-full justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 sm:mt-0 sm:w-auto"
-                                            onClick={onClose}
-                                        >
-                                            Annuler
-                                        </button>
-                                    </div>
-                                </form>
+                        {/* Payment Method */}
+                        <div>
+                            <label className="label">{t('transaction.payment_method')}</label>
+                            <div className="grid grid-cols-3 gap-2">
+                                {['CASH', 'CARD', 'TRANSFER', 'CHECK', 'MOBILE', 'OTHER'].map((method) => (
+                                    <button
+                                        key={method}
+                                        type="button"
+                                        onClick={() => setPaymentMethod(method)}
+                                        className={`p-2 rounded-lg text-sm flex items-center justify-center gap-1 transition-all ${paymentMethod === method
+                                            ? 'bg-blue-500 text-white'
+                                            : 'bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200'
+                                            }`}
+                                    >
+                                        <span>{paymentMethodIcons[method]}</span>
+                                        <span className="hidden sm:inline">{t(`transaction.method_${method}`)}</span>
+                                    </button>
+                                ))}
                             </div>
                         </div>
-                    </div>
+
+                        {/* Client/Supplier Name */}
+                        <div>
+                            <label className="label">
+                                {type === 'RECEIPT' ? t('transaction.client_name') : t('transaction.supplier_name')}
+                            </label>
+                            <input
+                                type="text"
+                                value={clientName}
+                                onChange={(e) => setClientName(e.target.value)}
+                                className="input"
+                                placeholder="Nom..."
+                            />
+                        </div>
+
+                        {/* Reference is hidden now */}
+
+                        {/* Description */}
+                        <div>
+                            <label className="label">{t('transaction.description')}</label>
+                            <textarea
+                                value={description}
+                                onChange={(e) => setDescription(e.target.value)}
+                                className="input"
+                                rows={2}
+                                placeholder="Description optionnelle..."
+                            />
+                        </div>
+
+                        <div className="flex gap-3 pt-4">
+                            <button type="button" onClick={onClose} className="btn-secondary flex-1" disabled={loading}>
+                                {t('common.cancel')}
+                            </button>
+                            <button
+                                type="submit"
+                                className={`flex-1 ${type === 'RECEIPT' ? 'btn-success' : 'btn-danger'}`}
+                                disabled={loading || !amount || !selectedFolio}
+                            >
+                                {loading ? <span className="spinner" /> : t('common.create')}
+                            </button>
+                        </div>
+                    </form>
                 </div>
-            </div>
+            </motion.div>
         </div>
-    )
+    );
 }

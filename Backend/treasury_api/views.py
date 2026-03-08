@@ -1,4 +1,5 @@
-from rest_framework import viewsets, status, views, permissions, generics
+from rest_framework import viewsets, status, permissions, generics
+from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.decorators import action
 from rest_framework.authtoken.models import Token
@@ -34,11 +35,10 @@ from .serializers import (
     DocumentSerializer, NotificationSerializer,
     SystemSettingsSerializer, AuditLogSerializer,
     AdminDashboardSerializer, GerantDashboardSerializer,
-    CaissierDashboardSerializer, SaisieDashboardSerializer
+    CaissierDashboardSerializer
 )
 from .permissions import (
     IsAdmin, IsGerantOrAdmin, IsCaissierOrAbove,
-    IsSaisieClientOrAdmin, IsSaisieFournisseurOrAdmin,
     CanManageFolio, CanManageTransaction, CanApprove,
     CanVoidTransaction, CanManageUsers, CanManageSettings,
     CanViewAuditLogs, CanExportReports
@@ -68,8 +68,8 @@ def log_audit(user, action, obj=None, details=None, reason=None, before=None, af
     )
 
 
-class AuthView(views.APIView):
-    """Authentication endpoint for login"""
+class AuthView(APIView):
+    """Authenticate user and return token + profile"""
     permission_classes = [permissions.AllowAny]
 
     def post(self, request):
@@ -110,8 +110,8 @@ class AuthView(views.APIView):
             }, status=status.HTTP_401_UNAUTHORIZED)
 
 
-class LogoutView(views.APIView):
-    """Logout endpoint"""
+class LogoutView(APIView):
+    """Logout current user (revoke token)"""
     permission_classes = [permissions.IsAuthenticated]
     
     def post(self, request):
@@ -120,8 +120,8 @@ class LogoutView(views.APIView):
         return Response({'success': True, 'message': 'Déconnexion réussie'})
 
 
-class CurrentUserView(views.APIView):
-    """Get current authenticated user info"""
+class CurrentUserView(APIView):
+    """Get current user profile"""
     permission_classes = [permissions.IsAuthenticated]
     
     def get(self, request):
@@ -138,8 +138,8 @@ class CurrentUserView(views.APIView):
         return Response({'success': False, 'errors': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
 
 
-class ChangePasswordView(views.APIView):
-    """Change password endpoint"""
+class ChangePasswordView(APIView):
+    """Change current user password"""
     permission_classes = [permissions.IsAuthenticated]
     
     def post(self, request):
@@ -174,13 +174,48 @@ class ChangePasswordView(views.APIView):
 
 # ==================== DASHBOARD VIEWS ====================
 
-class AdminDashboardView(views.APIView):
-    """Dashboard for Admin users"""
+class AdminDashboardView(APIView):
+    """Admin dashboard statistics"""
     permission_classes = [IsAdmin]
     
     def get(self, request):
         today = timezone.now().date()
         today_start = timezone.make_aware(timezone.datetime.combine(today, timezone.datetime.min.time()))
+        
+        # Chart Data Calculations
+        seven_days_ago = today_start - timedelta(days=6)
+        
+        # Cash Flow (last 7 days)
+        cash_flow_data = []
+        for i in range(7):
+            day = seven_days_ago + timedelta(days=i)
+            day_name = day.strftime('%a')
+            day_receipts = Transaction.objects.filter(
+                type='RECEIPT', status='APPROVED', 
+                created_at__year=day.year, created_at__month=day.month, created_at__day=day.day
+            ).aggregate(total=Sum('amount'))['total'] or 0
+            
+            day_payments = Transaction.objects.filter(
+                type='PAYMENT', status='APPROVED', 
+                created_at__year=day.year, created_at__month=day.month, created_at__day=day.day
+            ).aggregate(total=Sum('amount'))['total'] or 0
+            
+            cash_flow_data.append({
+                'name': day_name,
+                'receipts': float(day_receipts),
+                'payments': float(day_payments)
+            })
+            
+        # Payment Methods
+        payment_methods_data = []
+        methods = Transaction.objects.filter(status='APPROVED').values('payment_method').annotate(total=Sum('amount'))
+        for pm in methods:
+            if pm['payment_method'] and pm['total'] > 0:
+                pm_display = dict(Transaction._meta.get_field('payment_method').choices).get(pm['payment_method'], pm['payment_method'])
+                payment_methods_data.append({
+                    'name': str(pm_display),
+                    'value': float(pm['total'])
+                })
         
         # KPIs
         total_liquidity = Folio.objects.filter(status='OPEN').aggregate(
@@ -234,14 +269,16 @@ class AdminDashboardView(views.APIView):
             'users_count': User.objects.filter(is_active=True).count(),
             'recent_modifications': AuditLogSerializer(recent_mods, many=True).data,
             'pending_settlements': SettlementSerializer(pending_settlements, many=True).data,
-            'open_folios_by_branch': folios_by_branch
+            'open_folios_by_branch': folios_by_branch,
+            'cash_flow_data': cash_flow_data,
+            'payment_methods_data': payment_methods_data
         }
         
         return Response(data)
 
 
-class GerantDashboardView(views.APIView):
-    """Dashboard for Gérant users"""
+class GerantDashboardView(APIView):
+    """Gérant dashboard statistics"""
     permission_classes = [IsGerantOrAdmin]
     
     def get(self, request):
@@ -316,8 +353,8 @@ class GerantDashboardView(views.APIView):
         return Response(data)
 
 
-class CaissierDashboardView(views.APIView):
-    """Dashboard for Caissier users"""
+class CaissierDashboardView(APIView):
+    """Caissier dashboard statistics"""
     permission_classes = [IsCaissierOrAbove]
     
     def get(self, request):
@@ -364,110 +401,6 @@ class CaissierDashboardView(views.APIView):
             'today_transactions_count': today_transactions,
             'last_receipt_number': last_receipt.receipt_number if last_receipt else None,
             'recent_transactions': TransactionSerializer(recent_transactions, many=True).data
-        }
-        
-        return Response(data)
-
-
-class SaisieClientDashboardView(views.APIView):
-    """Dashboard for Saisie Règlement Client users"""
-    permission_classes = [IsSaisieClientOrAdmin]
-    
-    def get(self, request):
-        today = timezone.now().date()
-        today_start = timezone.make_aware(timezone.datetime.combine(today, timezone.datetime.min.time()))
-        
-        # Today's registered settlements
-        today_settlements = Settlement.objects.filter(
-            created_by=request.user,
-            party_type='CLIENT',
-            created_at__gte=today_start
-        )
-        
-        # Processing amount (draft + proposed)
-        processing = Settlement.objects.filter(
-            created_by=request.user,
-            party_type='CLIENT',
-            status__in=['DRAFT', 'PROPOSED']
-        ).aggregate(total=Sum('amount'))['total'] or 0
-        
-        # Pending approvals
-        pending = Settlement.objects.filter(
-            created_by=request.user,
-            party_type='CLIENT',
-            status='PROPOSED'
-        ).count()
-        
-        # Recent settlements
-        recent = Settlement.objects.filter(
-            created_by=request.user,
-            party_type='CLIENT'
-        ).order_by('-created_at')[:10]
-        
-        # Open client invoices
-        open_invoices = Invoice.objects.filter(
-            invoice_type='CLIENT',
-            status__in=['DRAFT', 'SENT', 'PARTIAL']
-        ).order_by('-created_at')[:20]
-        
-        data = {
-            'today_registered_count': today_settlements.count(),
-            'processing_amount': float(processing),
-            'pending_approvals': pending,
-            'recent_settlements': SettlementSerializer(recent, many=True).data,
-            'open_invoices': InvoiceSerializer(open_invoices, many=True).data
-        }
-        
-        return Response(data)
-
-
-class SaisieFournisseurDashboardView(views.APIView):
-    """Dashboard for Saisie Règlement Fournisseurs users"""
-    permission_classes = [IsSaisieFournisseurOrAdmin]
-    
-    def get(self, request):
-        today = timezone.now().date()
-        today_start = timezone.make_aware(timezone.datetime.combine(today, timezone.datetime.min.time()))
-        
-        # Today's registered settlements
-        today_settlements = Settlement.objects.filter(
-            created_by=request.user,
-            party_type='SUPPLIER',
-            created_at__gte=today_start
-        )
-        
-        # Processing amount
-        processing = Settlement.objects.filter(
-            created_by=request.user,
-            party_type='SUPPLIER',
-            status__in=['DRAFT', 'PROPOSED']
-        ).aggregate(total=Sum('amount'))['total'] or 0
-        
-        # Pending approvals
-        pending = Settlement.objects.filter(
-            created_by=request.user,
-            party_type='SUPPLIER',
-            status='PROPOSED'
-        ).count()
-        
-        # Recent settlements
-        recent = Settlement.objects.filter(
-            created_by=request.user,
-            party_type='SUPPLIER'
-        ).order_by('-created_at')[:10]
-        
-        # Open supplier invoices
-        open_invoices = Invoice.objects.filter(
-            invoice_type='SUPPLIER',
-            status__in=['DRAFT', 'SENT', 'PARTIAL']
-        ).order_by('-created_at')[:20]
-        
-        data = {
-            'today_registered_count': today_settlements.count(),
-            'processing_amount': float(processing),
-            'pending_approvals': pending,
-            'recent_settlements': SettlementSerializer(recent, many=True).data,
-            'open_invoices': InvoiceSerializer(open_invoices, many=True).data
         }
         
         return Response(data)
@@ -564,9 +497,13 @@ class FolioViewSet(viewsets.ModelViewSet):
         queryset = super().get_queryset()
         user = self.request.user
         
-        # Filter by branch for non-admins
-        if user.role != 'ADMIN' and user.branch:
+        # CAISSIER: only sees folios explicitly assigned to them
+        if user.role == 'CAISSIER':
+            queryset = queryset.filter(assigned_users=user)
+        # GERANT: sees folios for their branch
+        elif user.role == 'GERANT' and user.branch:
             queryset = queryset.filter(Q(branch=user.branch) | Q(branch__isnull=True))
+        # ADMIN: sees all folios (no filter)
         
         # Filter by status
         status_param = self.request.query_params.get('status')
@@ -576,22 +513,39 @@ class FolioViewSet(viewsets.ModelViewSet):
         return queryset
     
     def create(self, request, *args, **kwargs):
-        """Create and open a new Folio"""
+        """Create and open a new Folio — Admin and GERANT only"""
+        if request.user.role not in ['ADMIN', 'GERANT']:
+            return Response({
+                'success': False,
+                'message': 'Seul un Administrateur ou Gérant peut créer un folio'
+            }, status=status.HTTP_403_FORBIDDEN)
+        
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         
         # Generate unique code
         code = f"FOLIO-{timezone.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
         
+        # FEATURE 4 — Branch auto-link: GERANT's branch is used if no branch provided
+        branch = serializer.validated_data.get('branch')
+        if not branch and request.user.branch:
+            branch = request.user.branch
+        
+        assigned_users = serializer.validated_data.pop('assigned_users', [])
+        
         with db_transaction.atomic():
             folio = Folio.objects.create(
                 code=code,
-                branch=request.user.branch or serializer.validated_data.get('branch'),
+                branch=branch,
                 opened_by=request.user,
                 opening_balance=serializer.validated_data.get('opening_balance', 0),
                 notes=serializer.validated_data.get('notes', ''),
                 status='OPEN'
             )
+            
+            # Assign users if provided
+            if assigned_users:
+                folio.assigned_users.set(assigned_users)
             
             log_audit(request.user, 'OPEN_FOLIO', obj=folio, request=request)
         
@@ -668,8 +622,9 @@ class FolioViewSet(viewsets.ModelViewSet):
                     user=gerant,
                     notification_type='FOLIO_CLOSURE',
                     priority='HIGH',
-                    title=f'Demande de clôture: {folio.code}',
-                    message=f'{request.user.get_full_name()} a proposé la clôture du folio {folio.code}',
+                    title='NOTIF_FOLIO_CLOSURE_PROPOSED_TITLE',
+                    message='NOTIF_FOLIO_CLOSURE_PROPOSED_MSG',
+                    action_data={'folio_code': folio.code, 'user': request.user.get_full_name()},
                     action_url=f'/folios/{folio.id}'
                 )
         
@@ -723,6 +678,24 @@ class FolioViewSet(viewsets.ModelViewSet):
             
             log_audit(request.user, 'CLOSE_FOLIO', obj=folio,
                       details=f'Closing balance: {closing_balance}', request=request)
+            
+            # Delete pending closure notifications for this folio
+            Notification.objects.filter(
+                notification_type='FOLIO_CLOSURE',
+                title__contains=folio.code
+            ).delete()
+            
+            # Notify the proposer explicitly that it was approved
+            if getattr(folio, 'closure_proposed_by', None):
+                Notification.objects.create(
+                    user=folio.closure_proposed_by,
+                    notification_type='GENERAL',
+                    priority='HIGH',
+                    title='NOTIF_FOLIO_CLOSURE_APPROVED_TITLE',
+                    message='NOTIF_FOLIO_CLOSURE_APPROVED_MSG',
+                    action_data={'folio_code': folio.code, 'user': request.user.get_full_name()},
+                    action_url=f'/folios/{folio.id}'
+                )
         
         return Response({
             'success': True,
@@ -759,20 +732,134 @@ class FolioViewSet(viewsets.ModelViewSet):
             log_audit(request.user, 'REJECT_CLOSURE', obj=folio,
                       reason=reason, request=request)
             
-            # Notify the proposer
-            if folio.opened_by:
+            # Notify the proposer explicitly
+            if folio.closure_proposed_by:
+                notif_user = folio.closure_proposed_by
                 Notification.objects.create(
-                    user=folio.opened_by,
+                    user=notif_user,
                     notification_type='GENERAL',
-                    priority='MEDIUM',
-                    title=f'Clôture refusée: {folio.code}',
-                    message=f'La proposition de clôture a été refusée. Raison: {reason}',
+                    priority='HIGH',
+                    title='NOTIF_FOLIO_CLOSURE_REJECTED_TITLE',
+                    message='NOTIF_FOLIO_CLOSURE_REJECTED_MSG',
+                    action_data={'folio_code': folio.code, 'reason': reason},
+                    action_url=f'/folios/{folio.id}'
+                )
+            
+            # Delete pending closure notifications for this folio
+            Notification.objects.filter(
+                notification_type='FOLIO_CLOSURE',
+                title__contains=folio.code
+            ).delete()
+        
+        return Response({
+            'success': True,
+            'message': 'Proposition de clôture refusée',
+            'folio': FolioSerializer(folio).data
+        })
+    
+    @action(detail=True, methods=['post'])
+    def direct_close(self, request, pk=None):
+        """FEATURE 3 — Directly close a folio (Admin/GERANT only, no CLOSURE_PROPOSED step needed)"""
+        folio = self.get_object()
+        
+        if request.user.role not in ['ADMIN', 'GERANT']:
+            return Response({
+                'success': False,
+                'message': 'Seul un Administrateur ou Gérant peut fermer directement un folio'
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        if folio.status not in ['OPEN', 'CLOSURE_PROPOSED']:
+            return Response({
+                'success': False,
+                'message': 'Ce folio ne peut pas être fermé (statut actuel: ' + folio.get_status_display() + ')'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        actual_balance = request.data.get('actual_physical_balance')
+        notes = request.data.get('notes', '')
+        
+        with db_transaction.atomic():
+            receipts = folio.transactions.filter(
+                type='RECEIPT', status='APPROVED'
+            ).aggregate(total=Sum('amount'))['total'] or 0
+            payments = folio.transactions.filter(
+                type='PAYMENT', status='APPROVED'
+            ).aggregate(total=Sum('amount'))['total'] or 0
+            closing_balance = float(folio.opening_balance) + float(receipts) - float(payments)
+            
+            folio.status = 'CLOSED'
+            folio.closed_by = request.user
+            folio.closed_at = timezone.now()
+            folio.closing_balance = closing_balance
+            if actual_balance is not None:
+                folio.actual_physical_balance = actual_balance
+            if notes:
+                folio.notes = (folio.notes or '') + f'\n[Clôture directe] {notes}'
+            folio.save()
+            
+            log_audit(request.user, 'CLOSE_FOLIO', obj=folio,
+                      details=f'Direct close. Closing balance: {closing_balance}', request=request)
+            
+            # Notify assigned users
+            for assigned_user in folio.assigned_users.all():
+                Notification.objects.create(
+                    user=assigned_user,
+                    notification_type='FOLIO_CLOSURE',
+                    priority='HIGH',
+                    title='NOTIF_FOLIO_CLOSED_TITLE',
+                    message='NOTIF_FOLIO_CLOSED_MSG',
+                    action_data={'folio_code': folio.code, 'user': request.user.get_full_name()},
                     action_url=f'/folios/{folio.id}'
                 )
         
         return Response({
             'success': True,
-            'message': 'Proposition de clôture refusée',
+            'message': 'Folio clôturé avec succès',
+            'folio': FolioSerializer(folio).data
+        })
+    
+    @action(detail=True, methods=['post'])
+    def assign_users(self, request, pk=None):
+        """FEATURE 1 — Assign CAISSIER users to a folio (Admin only)"""
+        if request.user.role not in ['ADMIN', 'GERANT']:
+            return Response({
+                'success': False,
+                'message': 'Seul un Administrateur ou Gérant peut assigner des utilisateurs'
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        folio = self.get_object()
+        user_ids = request.data.get('user_ids', [])
+        
+        if not isinstance(user_ids, list):
+            return Response({
+                'success': False,
+                'message': 'user_ids doit être une liste'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        users_to_assign = User.objects.filter(id__in=user_ids, is_active=True)
+        
+        with db_transaction.atomic():
+            folio.assigned_users.set(users_to_assign)
+            folio.save()
+            
+            log_audit(request.user, 'UPDATE', obj=folio,
+                      details=f'Assigned users: {[u.username for u in users_to_assign]}',
+                      request=request)
+            
+            # Notify newly assigned users
+            for u in users_to_assign:
+                Notification.objects.create(
+                    user=u,
+                    notification_type='GENERAL',
+                    priority='MEDIUM',
+                    title='NOTIF_FOLIO_ASSIGNED_TITLE',
+                    message='NOTIF_FOLIO_ASSIGNED_MSG',
+                    action_data={'folio_code': folio.code, 'user': request.user.get_full_name()},
+                    action_url=f'/folios/{folio.id}'
+                )
+        
+        return Response({
+            'success': True,
+            'message': f'{users_to_assign.count()} utilisateur(s) assigné(s) au folio',
             'folio': FolioSerializer(folio).data
         })
     
@@ -878,8 +965,12 @@ class TransactionViewSet(viewsets.ModelViewSet):
         user = self.request.user
         
         # Filter by user's branch for non-admins
-        if user.role not in ['ADMIN', 'GERANT'] and user.branch:
+        if user.role == 'GERANT' and user.branch:
             queryset = queryset.filter(folio__branch=user.branch)
+        
+        # FEATURE 1: CAISSIER only sees their own transactions
+        if user.role == 'CAISSIER':
+            queryset = queryset.filter(created_by=user)
         
         # Additional filters
         folio_id = self.request.query_params.get('folio')
@@ -953,9 +1044,10 @@ class TransactionViewSet(viewsets.ModelViewSet):
                         user=approver,
                         notification_type='TRANSACTION_APPROVAL',
                         priority='HIGH',
-                        title=f'Transaction nécessitant approbation',
-                        message=f'Transaction de {amount} MRU créée par {request.user.get_full_name()}',
-                        action_url=f'/transactions/{transaction.id}'
+                        title='NOTIF_TX_APPROVAL_TITLE',
+                        message='NOTIF_TX_APPROVAL_MSG',
+                        action_data={'amount': str(amount), 'user': request.user.get_full_name() or request.user.username},
+                        action_url='/transactions'
                     )
         
         return Response({
@@ -983,7 +1075,8 @@ class TransactionViewSet(viewsets.ModelViewSet):
             }, status=status.HTTP_400_BAD_REQUEST)
         
         user = request.user
-        needs_approval = user.role == 'CAISSIER'
+        # FEATURE 2 — Any non-admin/non-gerant role must go through request workflow
+        needs_approval = user.role not in ['ADMIN', 'GERANT']
         
         with db_transaction.atomic():
             if needs_approval:
@@ -1003,9 +1096,10 @@ class TransactionViewSet(viewsets.ModelViewSet):
                         user=approver,
                         notification_type='VOID_REQUEST',
                         priority='HIGH',
-                        title='Demande d\'annulation',
-                        message=f'{user.get_full_name()} demande l\'annulation de la transaction {transaction.id}',
-                        action_url=f'/transactions/{transaction.id}'
+                        title='NOTIF_VOID_REQUEST_TITLE',
+                        message='NOTIF_VOID_REQUEST_MSG',
+                        action_data={'ref': str(transaction.id)[:8], 'user': user.get_full_name() or user.username},
+                        action_url='/transactions'
                     )
                 
                 log_audit(user, 'VOID_REQUEST', obj=transaction, reason=reason, request=request)
@@ -1030,6 +1124,101 @@ class TransactionViewSet(viewsets.ModelViewSet):
                     'message': 'Transaction annulée',
                     'transaction': TransactionSerializer(transaction).data
                 })
+    
+    @action(detail=True, methods=['post'])
+    def approve_void(self, request, pk=None):
+        """FEATURE 2 — Approve a pending void request (Admin/GERANT only)"""
+        if request.user.role not in ['ADMIN', 'GERANT']:
+            return Response({
+                'success': False,
+                'message': 'Seul un Administrateur ou Gérant peut approuver une annulation'
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        transaction = self.get_object()
+        
+        if not (transaction.void_requested_by and transaction.status == 'PENDING'):
+            return Response({
+                'success': False,
+                'message': 'Aucune demande d\'annulation en attente pour cette transaction'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        with db_transaction.atomic():
+            transaction.is_void = True
+            transaction.status = 'VOID'
+            transaction.void_approved_by = request.user
+            transaction.voided_at = timezone.now()
+            transaction.save()
+            
+            log_audit(request.user, 'VOID_TRANSACTION', obj=transaction,
+                      reason=transaction.void_reason, request=request)
+            
+            # Notify the requester
+            if transaction.void_requested_by:
+                Notification.objects.create(
+                    user=transaction.void_requested_by,
+                    notification_type='VOID_REQUEST',
+                    priority='MEDIUM',
+                    title='NOTIF_VOID_APPROVED_TITLE',
+                    message='NOTIF_VOID_APPROVED_MSG',
+                    action_data={'ref': str(transaction.id)[:8]},
+                    action_url='/transactions'
+                )
+        
+        return Response({
+            'success': True,
+            'message': 'Transaction annulée avec succès',
+            'transaction': TransactionSerializer(transaction).data
+        })
+    
+    @action(detail=True, methods=['post'])
+    def reject_void(self, request, pk=None):
+        """Reject a pending void request (Admin/GERANT only)"""
+        if request.user.role not in ['ADMIN', 'GERANT']:
+            return Response({
+                'success': False,
+                'message': 'Non autorisé'
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        transaction = self.get_object()
+        
+        if not (transaction.void_requested_by and transaction.status == 'PENDING'):
+            return Response({
+                'success': False,
+                'message': 'Aucune demande d\'annulation en attente pour cette transaction'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        rejection_reason = request.data.get('reason', 'Demande refusée')
+        
+        with db_transaction.atomic():
+            # Save requester reference before clearing
+            original_requester = transaction.void_requested_by
+            
+            # Restore the transaction to APPROVED
+            transaction.status = 'APPROVED'
+            transaction.void_requested_by = None
+            transaction.void_reason = None
+            transaction.save()
+            
+            log_audit(request.user, 'UPDATE', obj=transaction,
+                      details=f'Void request rejected: {rejection_reason}', request=request)
+            
+            # Notify the requester
+            if original_requester:
+                Notification.objects.create(
+                    user=original_requester,
+                    notification_type='VOID_REQUEST',
+                    priority='MEDIUM',
+                    title='NOTIF_VOID_REJECTED_TITLE',
+                    message='NOTIF_VOID_REJECTED_MSG',
+                    action_data={'reason': rejection_reason},
+                    action_url='/transactions'
+                )
+        
+        return Response({
+            'success': True,
+            'message': 'Demande d\'annulation refusée',
+            'transaction': TransactionSerializer(transaction).data
+        })
     
     @action(detail=True, methods=['post'])
     def print_receipt(self, request, pk=None):
@@ -1181,10 +1370,8 @@ class SettlementViewSet(viewsets.ModelViewSet):
         user = self.request.user
         
         # Filter based on role
-        if user.role == 'SAISIE_CLIENT':
-            queryset = queryset.filter(party_type='CLIENT')
-        elif user.role == 'SAISIE_FOURNISSEUR':
-            queryset = queryset.filter(party_type='SUPPLIER')
+        if user.role == 'SAISIE_FACTURE':
+            queryset = queryset.none() # Saisie Facture can no longer access settlements
         
         # Status filter
         status_param = self.request.query_params.get('status')
@@ -1203,6 +1390,29 @@ class SettlementViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         
         invoice_ids = serializer.validated_data.pop('invoice_ids', [])
+        settlement_amount = serializer.validated_data.get('amount', 0)
+        
+        # Overpayment guard: validate each linked invoice won't be overpaid
+        if invoice_ids:
+            invoices_to_link = Invoice.objects.filter(id__in=invoice_ids)
+            for invoice in invoices_to_link:
+                # Sum all approved/proposed settlements already linked to this invoice
+                already_paid = Settlement.objects.filter(
+                    invoices=invoice,
+                    status__in=['DRAFT', 'PROPOSED', 'APPROVED']
+                ).aggregate(total=Sum('amount'))['total'] or 0
+                
+                projected_total = already_paid + settlement_amount
+                if projected_total > invoice.total_amount:
+                    overpay = float(projected_total - invoice.total_amount)
+                    return Response({
+                        'success': False,
+                        'message': (
+                            f"Dépassement détecté sur la facture {invoice.invoice_number} "
+                            f"({invoice.party_name}). Montant restant : {float(invoice.remaining_amount):.2f} MRU. "
+                            f"Vous avez saisi {float(settlement_amount):.2f} MRU, ce qui dépasse de {overpay:.2f} MRU."
+                        )
+                    }, status=status.HTTP_400_BAD_REQUEST)
         
         with db_transaction.atomic():
             settlement = Settlement.objects.create(
@@ -1250,9 +1460,10 @@ class SettlementViewSet(viewsets.ModelViewSet):
                     user=approver,
                     notification_type='SETTLEMENT_APPROVAL',
                     priority='MEDIUM',
-                    title=f'Règlement à approuver',
-                    message=f'Règlement de {settlement.amount} MRU pour {settlement.party_name}',
-                    action_url=f'/settlements/{settlement.id}'
+                    title='NOTIF_SETTLEMENT_APPROVAL_REQUIRED_TITLE',
+                    message='NOTIF_SETTLEMENT_APPROVAL_REQUIRED_MSG',
+                    action_data={'amount': str(settlement.amount), 'party_name': settlement.party_name},
+                    action_url='/settlements'
                 )
         
         return Response({
@@ -1300,9 +1511,10 @@ class SettlementViewSet(viewsets.ModelViewSet):
                 user=settlement.created_by,
                 notification_type='GENERAL',
                 priority='LOW',
-                title='Règlement approuvé',
-                message=f'Votre règlement pour {settlement.party_name} a été approuvé',
-                action_url=f'/settlements/{settlement.id}'
+                title='NOTIF_SETTLEMENT_APPROVED_TITLE',
+                    message='NOTIF_SETTLEMENT_APPROVED_MSG',
+                    action_data={'party_name': settlement.party_name},
+                action_url='/settlements'
             )
         
         return Response({
@@ -1341,9 +1553,10 @@ class SettlementViewSet(viewsets.ModelViewSet):
                 user=settlement.created_by,
                 notification_type='GENERAL',
                 priority='MEDIUM',
-                title='Règlement rejeté',
-                message=f'Votre règlement a été rejeté. Raison: {reason}',
-                action_url=f'/settlements/{settlement.id}'
+                title='NOTIF_SETTLEMENT_REJECTED_TITLE',
+                    message='NOTIF_SETTLEMENT_REJECTED_MSG',
+                    action_data={'reason': reason},
+                action_url='/settlements'
             )
         
         return Response({
@@ -1380,6 +1593,9 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         open_only = self.request.query_params.get('open_only')
         if open_only and open_only.lower() == 'true':
             queryset = queryset.filter(status__in=['DRAFT', 'SENT', 'PARTIAL'])
+        
+        # Role-based filtering
+        user = self.request.user# Assuming other roles like ADMIN, GERANT, CAISSIER can see all invoices or have other rules defined elsewhere
         
         return queryset
     
@@ -1492,3 +1708,303 @@ class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
             queryset = queryset.filter(timestamp__date__lte=date_to)
         
         return queryset
+
+class PublicSettingsView(APIView):
+    """Public settings for login and unauthenticated views"""
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        company_setting = SystemSettings.objects.filter(key='company').first()
+        company_data = company_setting.value if company_setting else {
+            'name': 'NexaSolft',
+            'logo': ''
+        }
+        return Response({
+            'company': {
+                'name': company_data.get('name', 'NexaSolft'),
+                'logo': company_data.get('logo', '')
+            }
+        })
+
+
+class ReportsPDFView(APIView):
+    """Generate a professional PDF report using ReportLab"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        if request.user.role not in ['ADMIN', 'GERANT']:
+            return Response({'detail': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
+
+        # Query params
+        date_from_str = request.query_params.get('date_from')
+        date_to_str = request.query_params.get('date_to')
+        type_filter = request.query_params.get('type', '')
+
+        qs = Transaction.objects.filter(status='APPROVED', is_void=False)
+        if date_from_str:
+            qs = qs.filter(created_at__date__gte=date_from_str)
+        if date_to_str:
+            qs = qs.filter(created_at__date__lte=date_to_str)
+        if type_filter:
+            qs = qs.filter(type=type_filter)
+
+        transactions = list(qs.order_by('created_at'))
+
+        # Company info
+        company_setting = SystemSettings.objects.filter(key='company').first()
+        company = company_setting.value if company_setting else {}
+        company_name = company.get('name', 'NexaSolft')
+        company_phone = company.get('phone', '')
+        company_email = company.get('email', '')
+        company_website = company.get('website', '')
+
+        # ---- Build PDF ----
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(
+            buffer,
+            pagesize=A4,
+            leftMargin=15 * mm,
+            rightMargin=15 * mm,
+            topMargin=15 * mm,
+            bottomMargin=20 * mm,
+        )
+
+        styles = getSampleStyleSheet()
+        BLUE = colors.HexColor('#1e5aeb')
+        DARK = colors.HexColor('#1e293b')
+        GRAY = colors.HexColor('#64748b')
+        LIGHT = colors.HexColor('#f1f5f9')
+        GREEN = colors.HexColor('#059669')
+        RED = colors.HexColor('#dc2626')
+        WHITE = colors.white
+
+        title_style = ParagraphStyle('Title', fontSize=22, fontName='Helvetica-Bold', textColor=DARK, spaceAfter=2)
+        sub_style = ParagraphStyle('Sub', fontSize=10, fontName='Helvetica', textColor=GRAY)
+        section_style = ParagraphStyle('Section', fontSize=13, fontName='Helvetica-Bold', textColor=DARK, spaceBefore=14, spaceAfter=6)
+        small_style = ParagraphStyle('Small', fontSize=8, fontName='Helvetica', textColor=GRAY)
+        label_style = ParagraphStyle('Label', fontSize=9, fontName='Helvetica-Bold', textColor=DARK)
+
+        story = []
+
+        # ── Header ──────────────────────────────────────────────────────────
+        period_str = ''
+        if date_from_str and date_to_str:
+            period_str = f"Période : {date_from_str}  →  {date_to_str}"
+        elif date_from_str:
+            period_str = f"À partir de : {date_from_str}"
+
+        # Try to build logo element from base64
+        logo_element = None
+        logo_b64 = company.get('logo', '')
+        if logo_b64 and logo_b64.startswith('data:image'):
+            try:
+                import base64
+                header_split = logo_b64.split(',', 1)
+                img_data = base64.b64decode(header_split[1])
+                logo_buf = io.BytesIO(img_data)
+                logo_element = Image(logo_buf, width=20 * mm, height=20 * mm)
+                logo_element.hAlign = 'LEFT'
+            except Exception:
+                logo_element = None
+
+        left_cell = logo_element if logo_element else Paragraph(
+            f"<b><font color='#1e5aeb'>{company_name}</font></b>", title_style
+        )
+
+        header_data = [
+            [
+                left_cell,
+                Paragraph(f"<b>Rapport de Trésorerie</b>", ParagraphStyle('rh', fontSize=16, fontName='Helvetica-Bold', textColor=DARK, alignment=2)),
+            ],
+            [
+                Paragraph(f"<b><font color='#1e5aeb'>{company_name}</font></b><br/><font color='#64748b' size='9'>{company_phone}  {company_email}</font>", sub_style),
+                Paragraph(period_str, ParagraphStyle('per', fontSize=9, fontName='Helvetica', textColor=GRAY, alignment=2)),
+            ],
+        ]
+
+        header_table = Table(header_data, colWidths=[90 * mm, 90 * mm])
+        header_table.setStyle(TableStyle([
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('LINEBELOW', (0, 1), (-1, 1), 1.5, BLUE),
+            ('BOTTOMPADDING', (0, 1), (-1, 1), 8),
+        ]))
+        story.append(header_table)
+        story.append(Spacer(1, 8 * mm))
+
+        # ── Stats Summary ──────────────────────────────────────────────────
+        receipts = [tx for tx in transactions if tx.type == 'RECEIPT']
+        payments = [tx for tx in transactions if tx.type == 'PAYMENT']
+        total_in = sum(float(tx.amount) for tx in receipts)
+        total_out = sum(float(tx.amount) for tx in payments)
+        net = total_in - total_out
+
+        def fmt(v):
+            return f"{v:,.2f} MRU"
+
+        stats_data = [
+            [Paragraph("Recettes totales", label_style), Paragraph("Dépenses totales", label_style), Paragraph("Solde net", label_style)],
+            [Paragraph(f"<font color='#059669'><b>+{fmt(total_in)}</b></font>", ParagraphStyle('v', fontSize=14, fontName='Helvetica-Bold', textColor=GREEN)),
+             Paragraph(f"<font color='#dc2626'><b>-{fmt(total_out)}</b></font>", ParagraphStyle('v2', fontSize=14, fontName='Helvetica-Bold', textColor=RED)),
+             Paragraph(f"<b>{'+' if net >= 0 else ''}{fmt(net)}</b>", ParagraphStyle('v3', fontSize=14, fontName='Helvetica-Bold', textColor=BLUE if net >= 0 else RED))],
+            [Paragraph(f"{len(receipts)} transaction(s)", small_style), Paragraph(f"{len(payments)} transaction(s)", small_style), Paragraph("", small_style)],
+        ]
+        stats_table = Table(stats_data, colWidths=[60 * mm, 60 * mm, 60 * mm])
+        stats_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), LIGHT),
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#e2e8f0')),
+            ('ROWBACKGROUNDS', (0, 1), (-1, 1), [WHITE]),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
+            ('TOPPADDING', (0, 0), (-1, -1), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+            ('ROUNDEDCORNERS', [4]),
+        ]))
+        story.append(stats_table)
+        story.append(Spacer(1, 6 * mm))
+
+        # ── Transactions Table ─────────────────────────────────────────────
+        story.append(Paragraph("Détail des transactions", section_style))
+
+        tx_header = ['Date', 'Référence', 'Type', 'Montant', 'Méthode', 'Folio', 'Créé par']
+        tx_rows = [tx_header]
+        for tx in transactions:
+            type_label = 'Recette' if tx.type == 'RECEIPT' else 'Dépense'
+            amount_str = f"+{fmt(float(tx.amount))}" if tx.type == 'RECEIPT' else f"-{fmt(float(tx.amount))}"
+            tx_rows.append([
+                tx.created_at.strftime('%d/%m/%Y %H:%M'),
+                tx.reference or '-',
+                type_label,
+                amount_str,
+                tx.payment_method or '-',
+                tx.folio.code if tx.folio else '-',
+                tx.created_by.get_full_name() or tx.created_by.username if tx.created_by else '-',
+            ])
+
+        if len(tx_rows) == 1:
+            tx_rows.append(['Aucune transaction dans cette période', '', '', '', '', '', ''])
+
+        col_w = [30, 32, 22, 30, 22, 22, 22]  # mm
+        tx_table = Table(tx_rows, colWidths=[w * mm for w in col_w], repeatRows=1)
+        tx_style = TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), BLUE),
+            ('TEXTCOLOR', (0, 0), (-1, 0), WHITE),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 8),
+            ('FONTSIZE', (0, 1), (-1, -1), 7),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [WHITE, LIGHT]),
+            ('GRID', (0, 0), (-1, -1), 0.3, colors.HexColor('#e2e8f0')),
+            ('TOPPADDING', (0, 0), (-1, -1), 5),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+        ])
+        for i, tx in enumerate(transactions, start=1):
+            color = colors.HexColor('#dcfce7') if tx.type == 'RECEIPT' else colors.HexColor('#fee2e2')
+            tx_style.add('BACKGROUND', (3, i), (3, i), color)
+        tx_table.setStyle(tx_style)
+        story.append(tx_table)
+        story.append(Spacer(1, 6 * mm))
+
+        # ── Payment Methods Breakdown ──────────────────────────────────────
+        method_map = {}
+        for tx in transactions:
+            m = tx.payment_method or 'Autre'
+            if m not in method_map:
+                method_map[m] = {'receipts': 0.0, 'payments': 0.0}
+            if tx.type == 'RECEIPT':
+                method_map[m]['receipts'] += float(tx.amount)
+            else:
+                method_map[m]['payments'] += float(tx.amount)
+
+        if method_map:
+            story.append(Paragraph("Répartition par méthode de paiement", section_style))
+            meth_header = ['Méthode', 'Recettes', 'Dépenses', 'Total net']
+            meth_rows = [meth_header]
+            for m, vals in method_map.items():
+                net_m = vals['receipts'] - vals['payments']
+                meth_rows.append([
+                    m, f"+{fmt(vals['receipts'])}", f"-{fmt(vals['payments'])}", fmt(net_m)
+                ])
+            meth_table = Table(meth_rows, colWidths=[50 * mm, 40 * mm, 40 * mm, 40 * mm])
+            meth_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), DARK),
+                ('TEXTCOLOR', (0, 0), (-1, 0), WHITE),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, -1), 8),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [WHITE, LIGHT]),
+                ('GRID', (0, 0), (-1, -1), 0.3, colors.HexColor('#e2e8f0')),
+                ('TOPPADDING', (0, 0), (-1, -1), 5),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+            ]))
+            story.append(meth_table)
+            story.append(Spacer(1, 6 * mm))
+
+        # ── Daily Breakdown ────────────────────────────────────────────────
+        daily = {}
+        for tx in transactions:
+            d = tx.created_at.strftime('%Y-%m-%d')
+            if d not in daily:
+                daily[d] = {'receipts': 0.0, 'payments': 0.0}
+            if tx.type == 'RECEIPT':
+                daily[d]['receipts'] += float(tx.amount)
+            else:
+                daily[d]['payments'] += float(tx.amount)
+
+        if daily:
+            story.append(Paragraph("Récapitulatif journalier", section_style))
+            day_header = ['Date', 'Recettes', 'Dépenses', 'Solde du jour']
+            day_rows = [day_header]
+            for d in sorted(daily.keys()):
+                vals = daily[d]
+                net_d = vals['receipts'] - vals['payments']
+                day_rows.append([
+                    d, f"+{fmt(vals['receipts'])}", f"-{fmt(vals['payments'])}", fmt(net_d)
+                ])
+            day_table = Table(day_rows, colWidths=[40 * mm, 42 * mm, 42 * mm, 42 * mm])
+            day_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#374151')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), WHITE),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, -1), 8),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [WHITE, LIGHT]),
+                ('GRID', (0, 0), (-1, -1), 0.3, colors.HexColor('#e2e8f0')),
+                ('TOPPADDING', (0, 0), (-1, -1), 5),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+            ]))
+            story.append(day_table)
+            story.append(Spacer(1, 8 * mm))
+
+        # ── Signature Footer ───────────────────────────────────────────────
+        from datetime import datetime
+        gen_time = datetime.now().strftime('%d/%m/%Y à %H:%M')
+        sig_data = [
+            ['Caissier', 'Gérant', 'Administrateur'],
+            ['\n\n\n_________________', '\n\n\n_________________', '\n\n\n_________________'],
+        ]
+        sig_table = Table(sig_data, colWidths=[60 * mm, 60 * mm, 60 * mm])
+        sig_table.setStyle(TableStyle([
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('TEXTCOLOR', (0, 0), (-1, 0), GRAY),
+            ('LINEABOVE', (0, 0), (-1, 0), 1, colors.HexColor('#e2e8f0')),
+            ('TOPPADDING', (0, 0), (-1, 0), 10),
+        ]))
+        story.append(sig_table)
+        story.append(Spacer(1, 4 * mm))
+        story.append(Paragraph(
+            f"<font color='#94a3b8'>Document généré le {gen_time} — {company_name} — Confidentiel</font>",
+            ParagraphStyle('footer', fontSize=7, fontName='Helvetica', alignment=TA_CENTER)
+        ))
+
+        doc.build(story)
+        buffer.seek(0)
+
+        filename = f"rapport_tresorerie_{date_from_str or 'tout'}_{date_to_str or 'tout'}.pdf"
+        response = HttpResponse(buffer.read(), content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
+

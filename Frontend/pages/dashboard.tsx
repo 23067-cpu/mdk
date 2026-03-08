@@ -9,29 +9,11 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '../contexts/AuthContext';
-import { DashboardData, Folio, Transaction, Settlement } from '../services/api';
+import { DashboardData, Folio, Transaction, Settlement, Invoice } from '../services/api';
 import { LineChartComponent, PieChartComponent, BarChartComponent } from '../components/Charts';
 
-// Demo data for charts (will be replaced by API data)
-const cashFlowData = [
-    { name: 'Lun', receipts: 125000, payments: 95000 },
-    { name: 'Mar', receipts: 180000, payments: 75000 },
-    { name: 'Mer', receipts: 145000, payments: 120000 },
-    { name: 'Jeu', receipts: 230000, payments: 160000 },
-    { name: 'Ven', receipts: 195000, payments: 140000 },
-    { name: 'Sam', receipts: 85000, payments: 45000 },
-    { name: 'Dim', receipts: 65000, payments: 25000 },
-];
+// Chart data is now provided dynamically via the API (dashboardData.cash_flow_data / payment_methods_data)
 
-const paymentMethodsData = [
-    { name: 'Espèces', value: 450000 },
-    { name: 'Virement', value: 280000 },
-    { name: 'Chèque', value: 150000 },
-    { name: 'Mobile Money', value: 95000 },
-];
-
-
-// KPI Card Component
 interface KPICardProps {
     title: string;
     value: string | number;
@@ -130,7 +112,7 @@ function QuickAction({ href, icon, label, description }: QuickActionProps) {
 }
 
 export default function Dashboard() {
-    const { t } = useTranslation('common');
+    const { t, i18n } = useTranslation('common');
     const { user, getDashboardData } = useAuth();
     const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
     const [loading, setLoading] = useState(true);
@@ -312,13 +294,13 @@ export default function Dashboard() {
                 {/* Cash Flow Chart */}
                 <div className="card p-6">
                     <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                        Flux de trésorerie (7 jours)
+                        {t('dashboard.cash_flow_chart')}
                     </h3>
                     <LineChartComponent
-                        data={cashFlowData}
+                        data={dashboardData?.cash_flow_data || []}
                         lines={[
-                            { dataKey: 'receipts', name: 'Encaissements', color: '#10b981' },
-                            { dataKey: 'payments', name: 'Décaissements', color: '#f59e0b' },
+                            { dataKey: 'receipts', name: t('dashboard.receipts_label'), color: '#10b981' },
+                            { dataKey: 'payments', name: t('dashboard.payments_label'), color: '#f59e0b' },
                         ]}
                         height={280}
                     />
@@ -327,10 +309,10 @@ export default function Dashboard() {
                 {/* Payment Methods Chart */}
                 <div className="card p-6">
                     <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                        Répartition par méthode de paiement
+                        {t('dashboard.payment_methods_chart')}
                     </h3>
                     <PieChartComponent
-                        data={paymentMethodsData}
+                        data={dashboardData?.payment_methods_data || []}
                         height={280}
                         innerRadius={50}
                     />
@@ -372,7 +354,7 @@ export default function Dashboard() {
                     loading={loading}
                 />
                 <KPICard
-                    title="Clôtures en attente"
+                    title={t('dashboard.pending_closures')}
                     value={dashboardData?.pending_closure_requests || 0}
                     icon={<AlertTriangle size={24} />}
                     variant={dashboardData?.pending_closure_requests ? 'danger' : 'default'}
@@ -407,12 +389,12 @@ export default function Dashboard() {
                         <QuickAction
                             href="/folios?status=CLOSURE_PROPOSED"
                             icon={<Clock size={20} />}
-                            label="Clôtures à approuver"
+                            label={t('dashboard.closures_to_approve')}
                         />
                         <QuickAction
                             href="/settlements?status=PROPOSED"
                             icon={<FileText size={20} />}
-                            label="Règlements à approuver"
+                            label={t('dashboard.settlements_to_approve')}
                         />
                         <QuickAction
                             href="/reports"
@@ -425,7 +407,7 @@ export default function Dashboard() {
                 {/* Caissier Performance */}
                 <div className="card p-6">
                     <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                        Performance Caissiers
+                        {t('dashboard.cashiers_performance')}
                     </h3>
                     {loading ? (
                         <div className="space-y-3">
@@ -482,13 +464,13 @@ export default function Dashboard() {
                 >
                     <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
                         <div>
-                            <p className="text-blue-200 text-sm mb-1">Folio actuel</p>
+                            <p className="text-blue-200 text-sm mb-1">{t('dashboard.current_folio')}</p>
                             <h2 className="text-3xl font-bold mb-2">
-                                {currentFolio?.code || 'Aucun folio ouvert'}
+                                {currentFolio?.code || t('dashboard.no_open_folio')}
                             </h2>
                             {currentFolio && (
                                 <p className="text-blue-200">
-                                    Ouvert le {new Date(currentFolio.opened_at).toLocaleDateString('fr-FR')}
+                                    {t('dashboard.opened_on')} {new Date(currentFolio.opened_at).toLocaleDateString(i18n.language === 'ar' ? 'ar-MA' : 'fr-FR')}
                                 </p>
                             )}
                         </div>
@@ -519,13 +501,13 @@ export default function Dashboard() {
                         loading={loading}
                     />
                     <KPICard
-                        title="Dernier reçu"
+                        title={t('dashboard.last_receipt')}
                         value={dashboardData?.last_receipt_number || '-'}
                         icon={<FileText size={24} />}
                         loading={loading}
                     />
                     <KPICard
-                        title="Statut Folio"
+                        title={t('dashboard.folio_status')}
                         value={currentFolio ? t(`folio.status_${currentFolio.status}`) : '-'}
                         icon={<FolderOpen size={24} />}
                         variant={currentFolio?.status === 'OPEN' ? 'success' : 'default'}
@@ -637,122 +619,6 @@ export default function Dashboard() {
         );
     };
 
-    const renderSaisieDashboard = () => {
-        const partyType = user?.role === 'SAISIE_CLIENT' ? 'CLIENT' : 'SUPPLIER';
-
-        return (
-            <>
-                {/* KPIs */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-                    <KPICard
-                        title="Règlements aujourd'hui"
-                        value={dashboardData?.today_registered_count || 0}
-                        icon={<FileText size={24} />}
-                        loading={loading}
-                    />
-                    <KPICard
-                        title="Montant en traitement"
-                        value={formatCurrency(dashboardData?.processing_amount || 0)}
-                        icon={<Clock size={24} />}
-                        variant="warning"
-                        loading={loading}
-                    />
-                    <KPICard
-                        title={t('dashboard.pending_approvals')}
-                        value={dashboardData?.pending_approvals || 0}
-                        icon={<Clock size={24} />}
-                        loading={loading}
-                    />
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    {/* Quick Actions */}
-                    <div className="card p-6">
-                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                            {t('dashboard.quick_actions')}
-                        </h3>
-                        <div className="space-y-3">
-                            <Link
-                                href={`/settlements/new?party_type=${partyType}`}
-                                className="btn-primary w-full flex items-center justify-center gap-2"
-                            >
-                                <Plus size={18} />
-                                {t('settlement.create')}
-                            </Link>
-                            <QuickAction
-                                href="/settlements"
-                                icon={<FileText size={20} />}
-                                label={t('settlement.list_title')}
-                            />
-                            <QuickAction
-                                href="/invoices"
-                                icon={<FileText size={20} />}
-                                label={t('invoice.list_title')}
-                            />
-                        </div>
-                    </div>
-
-                    {/* Recent Settlements */}
-                    <div className="lg:col-span-2 card p-6">
-                        <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                                Règlements récents
-                            </h3>
-                            <Link href="/settlements" className="text-sm text-blue-600 hover:text-blue-700">
-                                {t('common.view')} →
-                            </Link>
-                        </div>
-
-                        {loading ? (
-                            <div className="space-y-3">
-                                {[1, 2, 3].map(i => (
-                                    <div key={i} className="skeleton h-14 rounded-xl" />
-                                ))}
-                            </div>
-                        ) : (dashboardData?.recent_settlements?.length ?? 0) > 0 ? (
-                            <div className="space-y-3">
-                                {dashboardData?.recent_settlements?.slice(0, 5).map((settlement: Settlement) => (
-                                    <div
-                                        key={settlement.id}
-                                        className="flex items-center justify-between p-4 bg-gray-50 dark:bg-slate-700/50 rounded-xl"
-                                    >
-                                        <div>
-                                            <p className="font-medium text-gray-900 dark:text-white">
-                                                {settlement.party_name}
-                                            </p>
-                                            <p className="text-sm text-gray-500 dark:text-gray-400">
-                                                {new Date(settlement.created_at).toLocaleDateString('fr-FR')}
-                                            </p>
-                                        </div>
-                                        <div className="text-right">
-                                            <p className="font-semibold text-gray-900 dark:text-white">
-                                                {formatCurrency(parseFloat(settlement.amount))}
-                                            </p>
-                                            <span className={`badge ${settlement.status === 'APPROVED' ? 'badge-success' :
-                                                settlement.status === 'REJECTED' ? 'badge-danger' :
-                                                    settlement.status === 'PROPOSED' ? 'badge-warning' :
-                                                        'badge-neutral'
-                                                }`}>
-                                                {t(`settlement.status_${settlement.status}`)}
-                                            </span>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        ) : (
-                            <div className="empty-state py-8">
-                                <FileText className="empty-state-icon" />
-                                <p className="text-gray-500 dark:text-gray-400">
-                                    {t('common.no_data')}
-                                </p>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            </>
-        );
-    };
-
     return (
         <div className="space-y-6">
             {/* Header */}
@@ -771,7 +637,6 @@ export default function Dashboard() {
             {user?.role === 'ADMIN' && renderAdminDashboard()}
             {user?.role === 'GERANT' && renderGerantDashboard()}
             {user?.role === 'CAISSIER' && renderCaissierDashboard()}
-            {(user?.role === 'SAISIE_CLIENT' || user?.role === 'SAISIE_FOURNISSEUR') && renderSaisieDashboard()}
         </div>
     );
 }

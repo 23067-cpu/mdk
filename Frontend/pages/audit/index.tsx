@@ -109,7 +109,7 @@ export default function AuditLogPage() {
             <div className="empty-state py-20">
                 <Lock className="empty-state-icon" />
                 <h3 className="text-lg font-medium mb-2">{t('auth.access_denied')}</h3>
-                <p className="text-gray-500">Cette page est réservée aux administrateurs et gérants</p>
+                <p className="text-gray-500">{t('audit.access_denied_desc')}</p>
             </div>
         );
     }
@@ -124,13 +124,13 @@ export default function AuditLogPage() {
                         {t('nav.audit')}
                     </h1>
                     <p className="text-gray-500 dark:text-gray-400">
-                        Historique complet des actions système
+                        {t('audit.audit_subtitle')}
                     </p>
                 </div>
 
                 <div className="flex items-center gap-2 text-sm text-gray-500">
                     <Activity size={16} />
-                    {logs.length} événements
+                    {logs.length} {t('audit.events_count')}
                 </div>
             </div>
 
@@ -145,7 +145,7 @@ export default function AuditLogPage() {
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                             className="input pl-12 rtl:pl-4 rtl:pr-12"
-                            placeholder="Rechercher..."
+                            placeholder={t('audit.search_placeholder')}
                         />
                     </div>
 
@@ -155,7 +155,7 @@ export default function AuditLogPage() {
                         onChange={(e) => setActionFilter(e.target.value)}
                         className="select"
                     >
-                        <option value="">Toutes les actions</option>
+                        <option value="">{t('audit.all_actions')}</option>
                         {uniqueActions.map((action) => (
                             <option key={action} value={action}>
                                 {action}
@@ -198,8 +198,8 @@ export default function AuditLogPage() {
                     <div className="p-12">
                         <div className="empty-state">
                             <Shield className="empty-state-icon" />
-                            <h3 className="text-lg font-medium mb-2">Aucun événement</h3>
-                            <p className="text-gray-500">Aucun événement ne correspond à vos critères</p>
+                            <h3 className="text-lg font-medium mb-2">{t('audit.no_events')}</h3>
+                            <p className="text-gray-500">{t('audit.no_events_desc')}</p>
                         </div>
                     </div>
                 ) : (
@@ -226,7 +226,7 @@ export default function AuditLogPage() {
                                             </span>
                                             {log.object_type && (
                                                 <span className="text-sm text-gray-500">
-                                                    sur {log.object_type}
+                                                    {t('audit.on_object')} {log.object_type}
                                                 </span>
                                             )}
                                             {log.object_repr && (
@@ -238,14 +238,18 @@ export default function AuditLogPage() {
 
                                         {log.details && (
                                             <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                                                {log.details}
+                                                {log.details === 'Login successful'
+                                                    ? t('audit.login_success', 'Connexion réussie')
+                                                    : log.details.startsWith('Failed login attempt for: ')
+                                                        ? `${t('audit.login_failed', 'Échec de connexion pour :')} ${log.details.replace('Failed login attempt for: ', '')}`
+                                                        : log.details}
                                             </p>
                                         )}
 
                                         <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
                                             <span className="flex items-center gap-1">
                                                 <User size={12} />
-                                                {log.user_name || 'Système'}
+                                                {log.user_name || t('audit.system_user')}
                                             </span>
                                             <span className="flex items-center gap-1">
                                                 <Calendar size={12} />
@@ -264,7 +268,7 @@ export default function AuditLogPage() {
                                                     className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1"
                                                 >
                                                     <Eye size={12} />
-                                                    {expandedLog === log.id ? 'Masquer' : 'Voir'} les détails
+                                                    {expandedLog === log.id ? t('audit.hide_details') : t('audit.show_details')}
                                                 </button>
 
                                                 {expandedLog === log.id && (
@@ -276,7 +280,7 @@ export default function AuditLogPage() {
                                                         {log.before_state && (
                                                             <div className="p-3 bg-red-50 dark:bg-red-900/20 rounded-lg">
                                                                 <p className="text-xs font-medium text-red-700 dark:text-red-400 mb-2">
-                                                                    Avant
+                                                                    {t('audit.before')}
                                                                 </p>
                                                                 <pre className="text-xs text-red-600 dark:text-red-300 overflow-auto max-h-40">
                                                                     {JSON.stringify(log.before_state, null, 2)}
@@ -286,7 +290,7 @@ export default function AuditLogPage() {
                                                         {log.after_state && (
                                                             <div className="p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg">
                                                                 <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400 mb-2">
-                                                                    Après
+                                                                    {t('audit.after')}
                                                                 </p>
                                                                 <pre className="text-xs text-emerald-600 dark:text-emerald-300 overflow-auto max-h-40">
                                                                     {JSON.stringify(log.after_state, null, 2)}

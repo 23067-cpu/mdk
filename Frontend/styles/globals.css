@@ -410,6 +410,25 @@ h4 { @apply text-lg md:text-xl; }
   @apply text-right;
 }
 
+/* RTL: fix search input padding so icon doesn't overlap the text */
+[dir="rtl"] .input.pl-12 {
+  padding-left: 1rem !important;
+  padding-right: 3rem !important;
+}
+
+[dir="rtl"] .input.pl-10 {
+  padding-left: 1rem !important;
+  padding-right: 2.5rem !important;
+}
+
+/* RTL: fix search icon absolute positioning inside relative wrappers */
+[dir="rtl"] .input ~ .search-icon-ltr,
+[dir="rtl"] .relative > svg.search-icon {
+  left: auto;
+  right: 1rem;
+}
+
+
 .table tbody {
   @apply bg-white divide-y divide-gray-100 dark:bg-slate-800 dark:divide-slate-700/50;
 }

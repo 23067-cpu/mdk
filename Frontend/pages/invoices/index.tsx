@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'next-i18next';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
 import { motion } from 'framer-motion';
-import Link from 'next/link';
+import { useRouter } from 'next/router';
 import {
     Plus, Search, Receipt, Users, Building2,
     Calendar, RefreshCw, AlertTriangle, CheckCircle,
@@ -203,6 +203,7 @@ function CreateInvoiceModal({ isOpen, onClose, onSuccess }: CreateInvoiceModalPr
 export default function InvoicesPage() {
     const { t } = useTranslation('common');
     const { user, hasRole } = useAuth();
+    const router = useRouter();
 
     const [invoices, setInvoices] = useState<Invoice[]>([]);
     const [loading, setLoading] = useState(true);
@@ -254,7 +255,7 @@ export default function InvoicesPage() {
         });
     };
 
-    const canCreate = hasRole(['ADMIN', 'GERANT', 'SAISIE_CLIENT', 'SAISIE_FOURNISSEUR']);
+    const canCreate = hasRole(['ADMIN', 'GERANT']);
 
     // Stats
     const totalOpen = invoices
@@ -272,7 +273,7 @@ export default function InvoicesPage() {
                         {t('invoice.title')}
                     </h1>
                     <p className="text-gray-500 dark:text-gray-400">
-                        Gérez les factures clients et fournisseurs
+                        {t('invoice.subtitle')}
                     </p>
                 </div>
 
@@ -291,7 +292,7 @@ export default function InvoicesPage() {
                         <Receipt size={24} />
                     </div>
                     <div>
-                        <p className="text-sm text-gray-500">Total factures</p>
+                        <p className="text-sm text-gray-500">{t('invoice.stats_total')}</p>
                         <p className="text-xl font-bold text-blue-600">{invoices.length}</p>
                     </div>
                 </div>
@@ -301,7 +302,7 @@ export default function InvoicesPage() {
                         <DollarSign size={24} />
                     </div>
                     <div>
-                        <p className="text-sm text-gray-500">Montant à percevoir</p>
+                        <p className="text-sm text-gray-500">{t('invoice.stats_receivable')}</p>
                         <p className="text-xl font-bold text-amber-600">{formatCurrency(totalOpen)}</p>
                     </div>
                 </div>
@@ -311,7 +312,7 @@ export default function InvoicesPage() {
                         {overdueCount > 0 ? <AlertTriangle size={24} /> : <CheckCircle size={24} />}
                     </div>
                     <div>
-                        <p className="text-sm text-gray-500">En retard</p>
+                        <p className="text-sm text-gray-500">{t('invoice.stats_overdue')}</p>
                         <p className={`text-xl font-bold ${overdueCount > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
                             {overdueCount}
                         </p>
@@ -381,8 +382,8 @@ export default function InvoicesPage() {
                 <div className="card p-12">
                     <div className="empty-state">
                         <Receipt className="empty-state-icon" />
-                        <h3 className="text-lg font-medium mb-2">Aucune facture</h3>
-                        <p className="text-gray-500 mb-4">Aucune facture ne correspond à vos critères</p>
+                        <h3 className="text-lg font-medium mb-2">{t('invoice.no_invoices')}</h3>
+                        <p className="text-gray-500 mb-4">{t('invoice.no_invoices_match')}</p>
                     </div>
                 </div>
             ) : (
@@ -393,7 +394,8 @@ export default function InvoicesPage() {
                             initial={{ opacity: 0, y: 20 }}
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ delay: index * 0.05 }}
-                            className="card-hover p-6"
+                            className="card-hover p-6 cursor-pointer"
+                            onClick={() => router.push(`/invoices/${invoice.id}`)}
                         >
                             {/* Header */}
                             <div className="flex items-start justify-between mb-4">

@@ -9,7 +9,7 @@ export interface User {
     email: string;
     first_name: string;
     last_name: string;
-    role: 'ADMIN' | 'GERANT' | 'CAISSIER' | 'SAISIE_CLIENT' | 'SAISIE_FOURNISSEUR';
+    role: 'ADMIN' | 'GERANT' | 'CAISSIER';
     role_display: string;
     branch?: number;
     branch_name?: string;
@@ -55,6 +55,9 @@ export interface Folio {
     variance?: number;
     transaction_count: number;
     notes?: string;
+    cash_counts?: CashCount[];
+    assigned_users?: number[];
+    assigned_user_names?: { id: number; name: string; role: string }[];
 }
 
 export interface Transaction {
@@ -79,9 +82,13 @@ export interface Transaction {
     approved_by_name?: string;
     is_void: boolean;
     void_reason?: string;
+    void_requested_by?: number;
+    void_requested_by_name?: string;
     receipt_number?: string;
     client_name?: string;
     supplier_name?: string;
+    debit_account?: number;
+    credit_account?: number;
 }
 
 export interface Settlement {
@@ -193,62 +200,6 @@ export interface CashCount {
     total: number;
 }
 
-export interface Folio {
-    id: number;
-    code: string;
-    branch?: number;
-    branch_name?: string;
-    opened_by: number;
-    opened_by_name: string;
-    opened_at: string;
-    opening_balance: string;
-    status: 'DRAFT' | 'OPEN' | 'CLOSURE_PROPOSED' | 'CLOSED' | 'ARCHIVED';
-    closure_proposed_by?: number;
-    closure_proposed_by_name?: string;
-    closure_proposed_at?: string;
-    closure_notes?: string;
-    closed_by?: number;
-    closed_by_name?: string;
-    closed_at?: string;
-    closing_balance?: string;
-    actual_physical_balance?: string;
-    running_balance: number;
-    variance?: number;
-    transaction_count: number;
-    notes?: string;
-    cash_counts?: CashCount[];
-}
-
-export interface Transaction {
-    id: number;
-    folio: number;
-    folio_code: string;
-    type: 'RECEIPT' | 'PAYMENT';
-    type_display: string;
-    amount: string;
-    currency: string;
-    payment_method: string;
-    payment_method_display: string;
-    reference?: string;
-    description?: string;
-    created_by: number;
-    created_by_name: string;
-    created_at: string;
-    status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'VOID';
-    status_display: string;
-    requires_approval: boolean;
-    approved_by?: number;
-    approved_by_name?: string;
-    is_void: boolean;
-    void_reason?: string;
-    receipt_number?: string;
-    client_name?: string;
-    supplier_name?: string;
-    debit_account?: number;
-    debit_account_details?: Account;
-    credit_account?: number;
-    credit_account_details?: Account;
-}
 export interface DashboardData {
     total_liquidity: number;
     open_folios_count: number;
@@ -270,6 +221,9 @@ export interface DashboardData {
     today_registered_count?: number;
     processing_amount?: number;
     recent_settlements?: Settlement[];
+    recent_invoices?: Invoice[];
+    cash_flow_data?: { name: string; receipts: number; payments: number }[];
+    payment_methods_data?: { name: string; value: number }[];
     [key: string]: unknown;
 }
 
@@ -387,19 +341,6 @@ export const dashboardApi = {
         return handleResponse(response);
     },
 
-    getSaisieClientDashboard: async (): Promise<DashboardData> => {
-        const response = await fetch(`${API_BASE_URL}/dashboard/saisie-client/`, {
-            headers: getAuthHeaders(),
-        });
-        return handleResponse(response);
-    },
-
-    getSaisieFournisseurDashboard: async (): Promise<DashboardData> => {
-        const response = await fetch(`${API_BASE_URL}/dashboard/saisie-fournisseur/`, {
-            headers: getAuthHeaders(),
-        });
-        return handleResponse(response);
-    },
 };
 
 // Folio API
@@ -455,6 +396,24 @@ export const folioApi = {
         return handleResponse(response);
     },
 
+    directClose: async (id: number, data?: { notes?: string; actual_physical_balance?: number }): Promise<{ success: boolean; folio: Folio; message: string }> => {
+        const response = await fetch(`${API_BASE_URL}/folios/${id}/direct_close/`, {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify(data || {}),
+        });
+        return handleResponse(response);
+    },
+
+    assignUsers: async (id: number, userIds: number[]): Promise<{ success: boolean; folio: Folio; message: string }> => {
+        const response = await fetch(`${API_BASE_URL}/folios/${id}/assign_users/`, {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({ user_ids: userIds }),
+        });
+        return handleResponse(response);
+    },
+
     printSummary: async (id: number): Promise<Blob> => {
         const response = await fetch(`${API_BASE_URL}/folios/${id}/print_summary/`, {
             headers: getAuthHeaders(),
@@ -499,8 +458,34 @@ export const transactionApi = {
         return handleResponse(response);
     },
 
+    update: async (id: number, data: Partial<Transaction>): Promise<{ success: boolean; transaction: Transaction; message: string }> => {
+        const response = await fetch(`${API_BASE_URL}/transactions/${id}/`, {
+            method: 'PATCH',
+            headers: getAuthHeaders(),
+            body: JSON.stringify(data),
+        });
+        return handleResponse(response);
+    },
+
     void: async (id: number, reason: string): Promise<{ success: boolean; transaction?: Transaction; message: string }> => {
         const response = await fetch(`${API_BASE_URL}/transactions/${id}/void/`, {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({ reason }),
+        });
+        return handleResponse(response);
+    },
+
+    approveVoid: async (id: number): Promise<{ success: boolean; transaction: Transaction; message: string }> => {
+        const response = await fetch(`${API_BASE_URL}/transactions/${id}/approve_void/`, {
+            method: 'POST',
+            headers: getAuthHeaders(),
+        });
+        return handleResponse(response);
+    },
+
+    rejectVoid: async (id: number, reason: string): Promise<{ success: boolean; transaction: Transaction; message: string }> => {
+        const response = await fetch(`${API_BASE_URL}/transactions/${id}/reject_void/`, {
             method: 'POST',
             headers: getAuthHeaders(),
             body: JSON.stringify({ reason }),
@@ -629,7 +614,7 @@ export const invoiceApi = {
 
 // Notification API
 export const notificationApi = {
-    list: async (): Promise<Notification[]> => {
+    list: async (): Promise<NotificationData[]> => {
         const response = await fetch(`${API_BASE_URL}/notifications/`, {
             headers: getAuthHeaders(),
         });
@@ -773,8 +758,28 @@ export const branchApi = {
     },
 };
 
+// Notification Data Interface
+export interface NotificationData {
+    id: number;
+    title: string;
+    message: string;
+    notification_type: string;
+    type_display?: string;
+    priority: string;
+    priority_display?: string;
+    is_read: boolean;
+    action_url: string | null;
+    action_data?: Record<string, any>;
+    created_at: string;
+}
+
 // System Settings API
 export const settingsApi = {
+    getPublic: async (): Promise<{ company: { name: string; logo: string; } }> => {
+        const response = await fetch(`${API_BASE_URL}/public-settings/`);
+        return handleResponse(response);
+    },
+
     list: async (): Promise<SystemSettings[]> => {
         const response = await fetch(`${API_BASE_URL}/settings/`, {
             headers: getAuthHeaders(),
@@ -848,3 +853,21 @@ export function downloadFile(blob: Blob, filename: string) {
     document.body.removeChild(a);
     window.URL.revokeObjectURL(url);
 }
+
+export const reportPdfApi = {
+    downloadPDF: async (params: { date_from?: string; date_to?: string; type?: string }): Promise<Blob> => {
+        const query = new URLSearchParams();
+        if (params.date_from) query.set('date_from', params.date_from);
+        if (params.date_to) query.set('date_to', params.date_to);
+        if (params.type) query.set('type', params.type);
+
+        const response = await fetch(`${API_BASE_URL}/reports/pdf/?${query.toString()}`, {
+            headers: getAuthHeaders(),
+        });
+        if (!response.ok) {
+            throw new Error('Erreur lors de la génération du PDF');
+        }
+        return response.blob();
+    }
+};
+

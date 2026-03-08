@@ -29,8 +29,6 @@ class User(AbstractUser):
         ('ADMIN', 'Administrateur'),
         ('GERANT', 'Gérant / Manager'),
         ('CAISSIER', 'Caissier / Cashier'),
-        ('SAISIE_CLIENT', 'Saisie Règlement Client'),
-        ('SAISIE_FOURNISSEUR', 'Saisie Règlement Fournisseurs'),
     ]
     
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='CAISSIER')
@@ -129,6 +127,14 @@ class Folio(models.Model):
     
     # Notes
     notes = models.TextField(null=True, blank=True)
+
+    # Users assigned to work on this folio (Caissiers/Kasya)
+    assigned_users = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        blank=True,
+        related_name='assigned_folios',
+        help_text='Users (Caissiers) who can access and work on this folio'
+    )
 
     class Meta:
         ordering = ['-opened_at']

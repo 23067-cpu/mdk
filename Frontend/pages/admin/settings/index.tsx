@@ -18,7 +18,10 @@ const defaultSettings = {
         phone: '+222 27 73 62 47',
         email: 'info@nexasoft.mr',
         website: 'https://www.nexasoft.mr',
+        facebook: 'https://facebook.com/nexasolft',
+        whatsapp: '+222 27 73 62 47',
         currency: 'MRU',
+        logo: '',
     },
     approval: {
         transaction_threshold: 50000,
@@ -144,12 +147,27 @@ export default function SettingsPage() {
         setHasChanges(true);
     };
 
+    const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            if (file.size > 2 * 1024 * 1024) {
+                error(t('common.error'), 'L\'image ne doit pas dépasser 2 MB');
+                return;
+            }
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                updateSetting('company', 'logo', reader.result as string);
+            };
+            reader.readAsDataURL(file);
+        }
+    };
+
     if (!hasRole('ADMIN')) {
         return (
             <div className="empty-state py-20">
                 <Lock className="empty-state-icon" />
                 <h3 className="text-lg font-medium mb-2">{t('auth.access_denied')}</h3>
-                <p className="text-gray-500">Cette page est réservée aux administrateurs</p>
+                <p className="text-gray-500">{t('settings.admin_only')}</p>
             </div>
         );
     }
@@ -176,7 +194,7 @@ export default function SettingsPage() {
                     >
                         <span className="text-sm text-amber-600 dark:text-amber-400 flex items-center gap-1">
                             <AlertTriangle size={16} />
-                            Modifications non enregistrées
+                            {t('settings.unsaved_changes')}
                         </span>
                         <button onClick={handleSave} className="btn-primary" disabled={loading}>
                             {loading ? <span className="spinner" /> : <Save size={18} />}
@@ -226,8 +244,31 @@ export default function SettingsPage() {
                                 </h2>
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="md:col-span-2 flex items-center gap-6 p-4 bg-gray-50 dark:bg-slate-700/50 rounded-xl">
+                                        <div className="w-20 h-20 bg-white dark:bg-slate-800 rounded-xl flex items-center justify-center overflow-hidden border border-gray-200 dark:border-slate-600 shrink-0">
+                                            {settings.company.logo ? (
+                                                <img src={settings.company.logo} alt="Logo" className="w-full h-full object-contain" />
+                                            ) : (
+                                                <Building2 className="text-gray-400" size={32} />
+                                            )}
+                                        </div>
+                                        <div className="flex-1">
+                                            <label className="block text-sm font-medium text-gray-900 dark:text-white mb-1">
+                                                {t('settings.company_logo')}
+                                            </label>
+                                            <p className="text-xs text-gray-500 mb-3">
+                                                {t('settings.logo_help')}
+                                            </p>
+                                            <input
+                                                type="file"
+                                                accept="image/*"
+                                                onChange={handleLogoUpload}
+                                                className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 dark:file:bg-blue-900/30 dark:file:text-blue-400"
+                                            />
+                                        </div>
+                                    </div>
                                     <div>
-                                        <label className="label">Nom de l'entreprise</label>
+                                        <label className="label">{t('settings.company_name')}</label>
                                         <input
                                             type="text"
                                             value={settings.company.name}
@@ -236,7 +277,7 @@ export default function SettingsPage() {
                                         />
                                     </div>
                                     <div>
-                                        <label className="label">Téléphone</label>
+                                        <label className="label">{t('settings.company_phone')}</label>
                                         <input
                                             type="tel"
                                             value={settings.company.phone}
@@ -245,7 +286,7 @@ export default function SettingsPage() {
                                         />
                                     </div>
                                     <div>
-                                        <label className="label">Email</label>
+                                        <label className="label">{t('settings.company_email')}</label>
                                         <input
                                             type="email"
                                             value={settings.company.email}
@@ -254,7 +295,7 @@ export default function SettingsPage() {
                                         />
                                     </div>
                                     <div>
-                                        <label className="label">Site Web</label>
+                                        <label className="label">{t('settings.company_website')}</label>
                                         <input
                                             type="url"
                                             value={settings.company.website}
@@ -262,8 +303,26 @@ export default function SettingsPage() {
                                             className="input"
                                         />
                                     </div>
+                                    <div>
+                                        <label className="label">{t('settings.company_facebook')}</label>
+                                        <input
+                                            type="url"
+                                            value={settings.company.facebook}
+                                            onChange={(e) => updateSetting('company', 'facebook', e.target.value)}
+                                            className="input"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="label">{t('settings.company_whatsapp')}</label>
+                                        <input
+                                            type="tel"
+                                            value={settings.company.whatsapp}
+                                            onChange={(e) => updateSetting('company', 'whatsapp', e.target.value)}
+                                            className="input"
+                                        />
+                                    </div>
                                     <div className="md:col-span-2">
-                                        <label className="label">Adresse</label>
+                                        <label className="label">{t('settings.company_address')}</label>
                                         <textarea
                                             value={settings.company.address}
                                             onChange={(e) => updateSetting('company', 'address', e.target.value)}
@@ -272,7 +331,7 @@ export default function SettingsPage() {
                                         />
                                     </div>
                                     <div>
-                                        <label className="label">Devise par défaut</label>
+                                        <label className="label">{t('settings.default_currency')}</label>
                                         <select
                                             value={settings.company.currency}
                                             onChange={(e) => updateSetting('company', 'currency', e.target.value)}
@@ -299,29 +358,29 @@ export default function SettingsPage() {
                                     <div>
                                         <label className="label flex items-center gap-2">
                                             <DollarSign size={16} />
-                                            Seuil d'approbation des transactions
+                                            {t('settings.approval_threshold')}
                                         </label>
                                         <div className="flex items-center gap-2">
                                             <input
                                                 type="number"
                                                 value={settings.approval.transaction_threshold}
-                                                onChange={(e) => updateSetting('approval', 'transaction_threshold', parseInt(e.target.value))}
+                                                onChange={(e) => updateSetting('approval', 'transaction_threshold', e.target.value ? parseInt(e.target.value) : '')}
                                                 className="input w-40"
                                             />
                                             <span className="text-gray-500">MRU</span>
                                         </div>
                                         <p className="text-sm text-gray-500 mt-1">
-                                            Les transactions supérieures à ce montant nécessitent l'approbation du Gérant
+                                            {t('settings.approval_threshold_help')}
                                         </p>
                                     </div>
 
                                     <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-slate-700/50 rounded-xl">
                                         <div>
                                             <p className="font-medium text-gray-900 dark:text-white">
-                                                Approbation des tèglements
+                                                {t('settings.approval_settlement')}
                                             </p>
                                             <p className="text-sm text-gray-500">
-                                                Exiger l'approbation du Gérant pour les tèglements
+                                                {t('settings.approval_settlement_help')}
                                             </p>
                                         </div>
                                         <label className="relative inline-flex items-center cursor-pointer">
@@ -338,10 +397,10 @@ export default function SettingsPage() {
                                     <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-slate-700/50 rounded-xl">
                                         <div>
                                             <p className="font-medium text-gray-900 dark:text-white">
-                                                Approbation de clôture Folio
+                                                {t('settings.approval_folio')}
                                             </p>
                                             <p className="text-sm text-gray-500">
-                                                Exiger l'approbation du Gérant pour fermer un folio
+                                                {t('settings.approval_folio_help')}
                                             </p>
                                         </div>
                                         <label className="relative inline-flex items-center cursor-pointer">
@@ -368,29 +427,29 @@ export default function SettingsPage() {
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div>
-                                        <label className="label">Timeout de session (minutes)</label>
+                                        <label className="label">{t('settings.security_timeout')}</label>
                                         <input
                                             type="number"
                                             value={settings.security.session_timeout_minutes}
-                                            onChange={(e) => updateSetting('security', 'session_timeout_minutes', parseInt(e.target.value))}
+                                            onChange={(e) => updateSetting('security', 'session_timeout_minutes', e.target.value ? parseInt(e.target.value) : '')}
                                             className="input"
                                         />
                                     </div>
                                     <div>
-                                        <label className="label">Tentatives de connexion max</label>
+                                        <label className="label">{t('settings.security_max_attempts')}</label>
                                         <input
                                             type="number"
                                             value={settings.security.max_login_attempts}
-                                            onChange={(e) => updateSetting('security', 'max_login_attempts', parseInt(e.target.value))}
+                                            onChange={(e) => updateSetting('security', 'max_login_attempts', e.target.value ? parseInt(e.target.value) : '')}
                                             className="input"
                                         />
                                     </div>
                                     <div>
-                                        <label className="label">Expiration du mot de passe (jours)</label>
+                                        <label className="label">{t('settings.security_password_expiry')}</label>
                                         <input
                                             type="number"
                                             value={settings.security.password_expiry_days}
-                                            onChange={(e) => updateSetting('security', 'password_expiry_days', parseInt(e.target.value))}
+                                            onChange={(e) => updateSetting('security', 'password_expiry_days', e.target.value ? parseInt(e.target.value) : '')}
                                             className="input"
                                         />
                                     </div>
@@ -399,10 +458,10 @@ export default function SettingsPage() {
                                 <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-slate-700/50 rounded-xl">
                                     <div>
                                         <p className="font-medium text-gray-900 dark:text-white">
-                                            Authentification à deux facteurs (2FA)
+                                            {t('settings.security_2fa')}
                                         </p>
                                         <p className="text-sm text-gray-500">
-                                            Exiger 2FA pour tous les utilisateurs
+                                            {t('settings.security_2fa_help')}
                                         </p>
                                     </div>
                                     <label className="relative inline-flex items-center cursor-pointer">
@@ -428,7 +487,7 @@ export default function SettingsPage() {
 
                                 <div className="space-y-4">
                                     <div>
-                                        <label className="label">Seuil d'alerte d'écart (MRU)</label>
+                                        <label className="label">{t('settings.notif_threshold')}</label>
                                         <input
                                             type="number"
                                             value={settings.notifications.discrepancy_threshold}
@@ -438,9 +497,9 @@ export default function SettingsPage() {
                                     </div>
 
                                     {[
-                                        { key: 'email_on_high_value_transaction', label: 'Email pour transactions de haute valeur' },
-                                        { key: 'email_on_folio_closure', label: 'Email à la clôture de folio' },
-                                        { key: 'email_on_settlement_approval', label: 'Email pour approbation de règlement' },
+                                        { key: 'email_on_high_value_transaction', label: t('settings.notif_high_value') },
+                                        { key: 'email_on_folio_closure', label: t('settings.notif_folio_close') },
+                                        { key: 'email_on_settlement_approval', label: t('settings.notif_settlement') },
                                     ].map((item) => (
                                         <div key={item.key} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-slate-700/50 rounded-xl">
                                             <p className="font-medium text-gray-900 dark:text-white">{item.label}</p>
@@ -469,7 +528,7 @@ export default function SettingsPage() {
 
                                 <div className="space-y-4">
                                     <div>
-                                        <label className="label">Texte d'en-tête</label>
+                                        <label className="label">{t('settings.receipt_header')}</label>
                                         <input
                                             type="text"
                                             value={settings.receipt.header_text}
@@ -478,7 +537,7 @@ export default function SettingsPage() {
                                         />
                                     </div>
                                     <div>
-                                        <label className="label">Texte de pied de page</label>
+                                        <label className="label">{t('settings.receipt_footer')}</label>
                                         <input
                                             type="text"
                                             value={settings.receipt.footer_text}
@@ -488,8 +547,8 @@ export default function SettingsPage() {
                                     </div>
 
                                     {[
-                                        { key: 'show_qr_code', label: 'Afficher le QR Code' },
-                                        { key: 'include_signature_line', label: 'Inclure la ligne de signature' },
+                                        { key: 'show_qr_code', label: t('settings.receipt_qr') },
+                                        { key: 'include_signature_line', label: t('settings.receipt_signature') },
                                     ].map((item) => (
                                         <div key={item.key} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-slate-700/50 rounded-xl">
                                             <p className="font-medium text-gray-900 dark:text-white">{item.label}</p>

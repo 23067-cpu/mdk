@@ -21,30 +21,6 @@ class IsCaissierOrAbove(permissions.BasePermission):
     def has_permission(self, request, view):
         return request.user.is_authenticated and request.user.role in ['ADMIN', 'GERANT', 'CAISSIER']
 
-
-class IsSaisieClientOrAdmin(permissions.BasePermission):
-    """Allow access to Saisie Règlement Client and Admin users"""
-    
-    def has_permission(self, request, view):
-        return request.user.is_authenticated and request.user.role in ['ADMIN', 'SAISIE_CLIENT']
-
-
-class IsSaisieFournisseurOrAdmin(permissions.BasePermission):
-    """Allow access to Saisie Règlement Fournisseurs and Admin users"""
-    
-    def has_permission(self, request, view):
-        return request.user.is_authenticated and request.user.role in ['ADMIN', 'SAISIE_FOURNISSEUR']
-
-
-class IsSaisieOrAbove(permissions.BasePermission):
-    """Allow access to any Saisie role, Caissier, Gérant, and Admin"""
-    
-    def has_permission(self, request, view):
-        return request.user.is_authenticated and request.user.role in [
-            'ADMIN', 'GERANT', 'CAISSIER', 'SAISIE_CLIENT', 'SAISIE_FOURNISSEUR'
-        ]
-
-
 class CanManageFolio(permissions.BasePermission):
     """Permission to manage Folios - create, open, close"""
     
@@ -70,12 +46,12 @@ class CanManageFolio(permissions.BasePermission):
                 return obj.branch == request.user.branch
             return True
         
-        # Caissier can only view and add transactions to their own folios
+        # Caissier can only view and add transactions to their assigned folios
         if request.user.role == 'CAISSIER':
             if request.method in permissions.SAFE_METHODS:
                 return True
-            # Can only modify folios they opened
-            return obj.opened_by == request.user
+            # Can modify if they are assigned to this folio
+            return obj.assigned_users.filter(id=request.user.id).exists()
         
         return False
 
@@ -87,7 +63,7 @@ class CanManageTransaction(permissions.BasePermission):
         if not request.user.is_authenticated:
             return False
         
-        allowed_roles = ['ADMIN', 'GERANT', 'CAISSIER', 'SAISIE_CLIENT', 'SAISIE_FOURNISSEUR']
+        allowed_roles = ['ADMIN', 'GERANT', 'CAISSIER']
         return request.user.role in allowed_roles
     
     def has_object_permission(self, request, view, obj):

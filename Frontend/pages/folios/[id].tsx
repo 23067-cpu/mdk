@@ -7,11 +7,13 @@ import Link from 'next/link';
 import {
     ArrowLeft, FolderOpen, DollarSign, Calendar, User,
     FileText, TrendingUp, TrendingDown, Clock, CheckCircle,
-    XCircle, Printer, AlertTriangle, Plus, Send, ThumbsUp, ThumbsDown
+    XCircle, Printer, AlertTriangle, Plus, Send, ThumbsUp, ThumbsDown,
+    Lock, Users
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { folioApi, transactionApi, Folio, Transaction, downloadFile } from '../../services/api';
+import { folioApi, transactionApi, userApi, Folio, Transaction, User as UserType, downloadFile } from '../../services/api';
 import BilletageModal from '../../components/BilletageModal';
+import TransactionModal from '../../components/TransactionModal';
 
 // Closure Modal (Approve/Reject only)
 interface ClosureModalProps {
@@ -156,6 +158,106 @@ function ClosureModal({ isOpen, folio, onClose, onSuccess, action }: ClosureModa
     );
 }
 
+// Void Transaction Modal
+interface VoidModalProps {
+    isOpen: boolean;
+    transaction: Transaction | null;
+    onClose: () => void;
+    onSuccess: () => void;
+}
+
+function VoidModal({ isOpen, transaction, onClose, onSuccess }: VoidModalProps) {
+    const { t } = useTranslation('common');
+    const [reason, setReason] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!transaction) return;
+
+        setError('');
+        setLoading(true);
+
+        try {
+            const result = await transactionApi.void(transaction.id, reason);
+            if (result.success) {
+                onSuccess();
+                onClose();
+                setReason('');
+            } else {
+                setError(result.message || 'Error');
+            }
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Error');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    if (!isOpen || !transaction) return null;
+
+    return (
+        <div className="modal-overlay" onClick={onClose}>
+            <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="modal-content max-w-md"
+                onClick={(e) => e.stopPropagation()}
+            >
+                <div className="p-6">
+                    <div className="flex items-center gap-3 mb-6">
+                        <div className="p-3 rounded-xl bg-red-100 text-red-600">
+                            <XCircle size={24} />
+                        </div>
+                        <div>
+                            <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                                {t('transaction.void_transaction', 'Annuler la transaction')}
+                            </h2>
+                            <p className="text-sm text-gray-500">
+                                Transaction #{transaction.id} - {parseFloat(transaction.amount).toFixed(2)} MRU
+                            </p>
+                        </div>
+                    </div>
+
+                    {error && (
+                        <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 rounded-xl text-red-700 text-sm">
+                            {error}
+                        </div>
+                    )}
+
+                    <form onSubmit={handleSubmit} className="space-y-4">
+                        <div>
+                            <label className="label">{t('transaction.void_reason', 'Raison de l\'annulation')} *</label>
+                            <textarea
+                                value={reason}
+                                onChange={(e) => setReason(e.target.value)}
+                                className="input"
+                                rows={4}
+                                required
+                                placeholder="Expliquez la raison de l'annulation..."
+                            />
+                        </div>
+
+                        <div className="flex gap-3 pt-4">
+                            <button type="button" onClick={onClose} className="btn-secondary flex-1" disabled={loading}>
+                                {t('common.cancel', 'Annuler')}
+                            </button>
+                            <button
+                                type="submit"
+                                className="btn-danger flex-1"
+                                disabled={loading || !reason.trim()}
+                            >
+                                {loading ? <span className="spinner" /> : t('common.confirm', 'Confirmer')}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </motion.div>
+        </div>
+    );
+}
+
 export default function FolioDetailPage() {
     const { t } = useTranslation('common');
     const router = useRouter();
@@ -172,6 +274,18 @@ export default function FolioDetailPage() {
         action: 'approve',
     });
     const [isBilletageModalOpen, setIsBilletageModalOpen] = useState(false);
+    const [isDirectCloseModalOpen, setIsDirectCloseModalOpen] = useState(false);
+    const [directCloseNotes, setDirectCloseNotes] = useState('');
+    const [directCloseLoading, setDirectCloseLoading] = useState(false);
+    const [isAssignUsersModalOpen, setIsAssignUsersModalOpen] = useState(false);
+    const [caissierUsers, setCaissierUsers] = useState<UserType[]>([]);
+    const [selectedUserIds, setSelectedUserIds] = useState<number[]>([]);
+    const [assignLoading, setAssignLoading] = useState(false);
+    const [isTransactionModalOpen, setIsTransactionModalOpen] = useState(false);
+    const [voidModal, setVoidModal] = useState<{ open: boolean; transaction: Transaction | null }>({
+        open: false,
+        transaction: null,
+    });
 
     const fetchData = async () => {
         if (!id) return;
@@ -220,7 +334,73 @@ export default function FolioDetailPage() {
             }
         } catch (error) {
             console.error('Error proposing closure:', error);
-            alert('Erreur technique lors de la clôture');
+            alert('Erreur lors de la proposition de clôture');
+        }
+    };
+
+
+
+    const handleEditTransaction = async (transactionId: number, data: any) => {
+        try {
+            const result = await transactionApi.update(transactionId, data);
+            if (result.success) {
+                fetchData();
+                setIsTransactionModalOpen(false);
+            } else {
+                alert(result.message || 'Erreur lors de la modification de la transaction');
+            }
+        } catch (error) {
+            console.error('Error editing transaction:', error);
+            alert('Une erreur est survenue lors de la modification.');
+        }
+    };
+
+    const handleDirectClose = async () => {
+        if (!folio) return;
+        setDirectCloseLoading(true);
+        try {
+            const result = await folioApi.directClose(folio.id, { notes: directCloseNotes || undefined });
+            if (result.success) {
+                setIsDirectCloseModalOpen(false);
+                setDirectCloseNotes('');
+                fetchData();
+            } else {
+                alert(result.message || 'Erreur lors de la clôture');
+            }
+        } catch (error) {
+            alert(error instanceof Error ? error.message : 'Erreur technique');
+        } finally {
+            setDirectCloseLoading(false);
+        }
+    };
+
+    const openAssignUsersModal = async () => {
+        if (!folio) return;
+        try {
+            const users = await userApi.list({ role: 'CAISSIER', is_active: true });
+            setCaissierUsers(users);
+            setSelectedUserIds(folio.assigned_users || []);
+            setIsAssignUsersModalOpen(true);
+        } catch (error) {
+            console.error('Error loading users:', error);
+        }
+    };
+
+    const handleAssignUsers = async () => {
+        if (!folio) return;
+        setAssignLoading(true);
+        try {
+            const result = await folioApi.assignUsers(folio.id, selectedUserIds);
+            if (result.success) {
+                setIsAssignUsersModalOpen(false);
+                fetchData();
+            } else {
+                alert(result.message || 'Erreur');
+            }
+        } catch (error) {
+            alert(error instanceof Error ? error.message : 'Erreur technique');
+        } finally {
+            setAssignLoading(false);
         }
     };
 
@@ -261,10 +441,13 @@ export default function FolioDetailPage() {
         );
     }
 
-    const canProposeClosure = folio.status === 'OPEN' && hasRole(['ADMIN', 'GERANT', 'CAISSIER']);
+    const canProposeClosure = folio.status === 'OPEN' && hasRole(['CAISSIER']);
     const canApproveClosure = folio.status === 'CLOSURE_PROPOSED' && hasRole(['ADMIN', 'GERANT']);
     const canRejectClosure = folio.status === 'CLOSURE_PROPOSED' && hasRole(['ADMIN', 'GERANT']);
+    const canDirectClose = ['OPEN', 'CLOSURE_PROPOSED'].includes(folio.status) && hasRole(['ADMIN', 'GERANT']);
+    const canAssignUsers = hasRole(['ADMIN', 'GERANT']) && folio.status !== 'ARCHIVED';
     const canAddTransaction = folio.status === 'OPEN' && hasRole(['ADMIN', 'GERANT', 'CAISSIER']);
+    const canVoid = hasRole(['ADMIN', 'GERANT', 'CAISSIER']);
 
     const totalReceipts = transactions
         .filter(tx => tx.type === 'RECEIPT' && tx.status === 'APPROVED')
@@ -306,13 +489,13 @@ export default function FolioDetailPage() {
                     </button>
 
                     {canAddTransaction && (
-                        <Link
-                            href={`/transactions/new?folio=${folio.id}`}
+                        <button
+                            onClick={() => setIsTransactionModalOpen(true)}
                             className="btn-primary"
                         >
                             <Plus size={18} />
                             {t('transaction.create')}
-                        </Link>
+                        </button>
                     )}
 
                     {canProposeClosure && (
@@ -322,6 +505,28 @@ export default function FolioDetailPage() {
                         >
                             <Send size={18} />
                             {t('folio.propose_closure')}
+                        </button>
+                    )}
+
+                    {canDirectClose && (
+                        <button
+                            onClick={() => setIsDirectCloseModalOpen(true)}
+                            className="btn-danger"
+                            id="direct-close-folio-btn"
+                        >
+                            <Lock size={18} />
+                            Fermer le Folio
+                        </button>
+                    )}
+
+                    {canAssignUsers && (
+                        <button
+                            onClick={openAssignUsersModal}
+                            className="btn-secondary"
+                            id="assign-users-btn"
+                        >
+                            <Users size={18} />
+                            Assigner utilisateurs
                         </button>
                     )}
 
@@ -515,14 +720,25 @@ export default function FolioDetailPage() {
                                             </p>
                                         </div>
                                     </div>
-                                    <div className="text-right">
+                                    <div className="text-right flex flex-col items-end gap-1">
                                         <p className={`font-semibold ${tx.type === 'RECEIPT' ? 'text-emerald-600' : 'text-red-600'
                                             }`}>
                                             {tx.type === 'RECEIPT' ? '+' : '-'}{formatCurrency(tx.amount)}
                                         </p>
-                                        {tx.is_void && (
-                                            <span className="badge badge-danger text-xs">Annulée</span>
-                                        )}
+                                        {tx.is_void ? (
+                                            <span className="badge badge-danger text-xs px-2 py-0.5">Annulée</span>
+                                        ) : tx.status === 'PENDING' ? (
+                                            <span className="badge badge-warning text-xs px-2 py-0.5">En attente</span>
+                                        ) : canVoid && tx.status === 'APPROVED' && folio.status === 'OPEN' ? (
+                                            <button
+                                                onClick={() => setVoidModal({ open: true, transaction: tx })}
+                                                className="text-xs text-red-600 hover:text-red-700 hover:underline flex items-center gap-1 mt-1"
+                                                title={hasRole(['ADMIN', 'GERANT']) ? t('transaction.void_transaction') : 'Demander annulation'}
+                                            >
+                                                <XCircle size={12} />
+                                                {hasRole(['ADMIN', 'GERANT']) ? 'Annuler' : 'Demander annulation'}
+                                            </button>
+                                        ) : null}
                                     </div>
                                 </div>
                             ))}
@@ -542,11 +758,146 @@ export default function FolioDetailPage() {
                 />
             )}
 
-            {/* Billetage Modal (Propose) */}
+            {/* Billetage Modal (Propose by CAISSIER) */}
             <BilletageModal
                 isOpen={isBilletageModalOpen}
                 onClose={() => setIsBilletageModalOpen(false)}
                 onConfirm={handleProposeClosure}
+                expectedBalance={folio ? Number(folio.running_balance) : undefined}
+            />
+
+            {/* Direct Close Modal (Admin/GERANT) */}
+            {isDirectCloseModalOpen && (
+                <div className="modal-overlay" onClick={() => setIsDirectCloseModalOpen(false)}>
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="modal-content"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="p-6">
+                            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Fermer le Folio</h2>
+                            <p className="text-sm text-gray-500 mb-6">
+                                Solde de clôture calculé : <strong>{formatCurrency(folio.running_balance)}</strong>
+                            </p>
+                            <div className="mb-4">
+                                <label className="label">Notes (optionnel)</label>
+                                <textarea
+                                    value={directCloseNotes}
+                                    onChange={(e) => setDirectCloseNotes(e.target.value)}
+                                    className="input"
+                                    rows={3}
+                                    placeholder="Raison de la clôture directe..."
+                                />
+                            </div>
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => setIsDirectCloseModalOpen(false)}
+                                    className="btn-secondary flex-1"
+                                    disabled={directCloseLoading}
+                                >
+                                    Annuler
+                                </button>
+                                <button
+                                    onClick={handleDirectClose}
+                                    className="btn-danger flex-1"
+                                    disabled={directCloseLoading}
+                                    id="confirm-direct-close-btn"
+                                >
+                                    {directCloseLoading ? <span className="spinner" /> : 'Confirmer la clôture'}
+                                </button>
+                            </div>
+                        </div>
+                    </motion.div>
+                </div>
+            )}
+
+            {/* Assign Users Modal (Admin/GERANT) */}
+            {isAssignUsersModalOpen && (
+                <div className="modal-overlay" onClick={() => setIsAssignUsersModalOpen(false)}>
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="modal-content"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="p-6">
+                            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
+                                Assigner des utilisateurs
+                            </h2>
+                            <p className="text-sm text-gray-500 mb-6">
+                                Sélectionnez les caisssiers qui peuvent accéder au folio {folio.code}.
+                            </p>
+                            <div className="space-y-2 max-h-64 overflow-y-auto mb-6">
+                                {caissierUsers.length === 0 ? (
+                                    <p className="text-sm text-gray-500">Aucun caissier actif disponible</p>
+                                ) : (
+                                    caissierUsers.map((u) => (
+                                        <label key={u.id} className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 dark:hover:bg-slate-700 cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedUserIds.includes(u.id)}
+                                                onChange={(e) =>
+                                                    setSelectedUserIds(prev =>
+                                                        e.target.checked
+                                                            ? [...prev, u.id]
+                                                            : prev.filter(id => id !== u.id)
+                                                    )
+                                                }
+                                                className="w-4 h-4 rounded"
+                                            />
+                                            <div>
+                                                <span className="font-medium text-gray-900 dark:text-white">
+                                                    {u.first_name} {u.last_name}
+                                                </span>
+                                                <span className="text-xs text-gray-500 ml-2">(@{u.username})</span>
+                                                {u.branch_name && (
+                                                    <span className="text-xs text-blue-500 ml-2">{u.branch_name}</span>
+                                                )}
+                                            </div>
+                                        </label>
+                                    ))
+                                )}
+                            </div>
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => setIsAssignUsersModalOpen(false)}
+                                    className="btn-secondary flex-1"
+                                    disabled={assignLoading}
+                                >
+                                    Annuler
+                                </button>
+                                <button
+                                    onClick={handleAssignUsers}
+                                    className="btn-primary flex-1"
+                                    disabled={assignLoading}
+                                    id="confirm-assign-users-btn"
+                                >
+                                    {assignLoading ? <span className="spinner" /> : `Assigner (${selectedUserIds.length})`}
+                                </button>
+                            </div>
+                        </div>
+                    </motion.div>
+                </div>
+            )}
+
+            {/* Transaction Modal */}
+            <TransactionModal
+                isOpen={isTransactionModalOpen}
+                folioId={Number(id)}
+                onClose={() => setIsTransactionModalOpen(false)}
+                onSuccess={() => {
+                    fetchData();
+                    setIsTransactionModalOpen(false);
+                }}
+            />
+
+            {/* Void Modal */}
+            <VoidModal
+                isOpen={voidModal.open}
+                transaction={voidModal.transaction}
+                onClose={() => setVoidModal({ open: false, transaction: null })}
+                onSuccess={fetchData}
             />
         </div>
     );

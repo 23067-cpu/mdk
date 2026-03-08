@@ -86,15 +86,10 @@ class FolioSerializer(serializers.ModelSerializer):
     branch_name = serializers.CharField(source='branch.name', read_only=True)
     running_balance = serializers.FloatField(read_only=True)
     variance = serializers.FloatField(read_only=True)
-class FolioSerializer(serializers.ModelSerializer):
-    opened_by_name = serializers.CharField(source='opened_by.get_full_name', read_only=True)
-    closed_by_name = serializers.CharField(source='closed_by.get_full_name', read_only=True)
-    closure_proposed_by_name = serializers.CharField(source='closure_proposed_by.get_full_name', read_only=True)
-    branch_name = serializers.CharField(source='branch.name', read_only=True)
-    running_balance = serializers.FloatField(read_only=True)
-    variance = serializers.FloatField(read_only=True)
     transaction_count = serializers.SerializerMethodField()
     cash_counts = CashCountSerializer(many=True, read_only=True)
+    assigned_users = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
+    assigned_user_names = serializers.SerializerMethodField()
     
     class Meta:
         model = Folio
@@ -102,12 +97,24 @@ class FolioSerializer(serializers.ModelSerializer):
     
     def get_transaction_count(self, obj):
         return obj.transactions.filter(status='APPROVED').count()
+    
+    def get_assigned_user_names(self, obj):
+        return [
+            {'id': u.id, 'name': u.get_full_name() or u.username, 'role': u.role}
+            for u in obj.assigned_users.all()
+        ]
 
 
 class FolioCreateSerializer(serializers.ModelSerializer):
+    assigned_users = serializers.PrimaryKeyRelatedField(
+        many=True,
+        queryset=User.objects.filter(role='CAISSIER', is_active=True),
+        required=False
+    )
+
     class Meta:
         model = Folio
-        fields = ['opening_balance', 'notes', 'branch']
+        fields = ['opening_balance', 'notes', 'branch', 'assigned_users']
 
 
 class FolioCloseSerializer(serializers.Serializer):
@@ -122,6 +129,7 @@ class FolioCloseSerializer(serializers.Serializer):
 class TransactionSerializer(serializers.ModelSerializer):
     created_by_name = serializers.CharField(source='created_by.get_full_name', read_only=True)
     approved_by_name = serializers.CharField(source='approved_by.get_full_name', read_only=True)
+    void_requested_by_name = serializers.CharField(source='void_requested_by.get_full_name', read_only=True)
     folio_code = serializers.CharField(source='folio.code', read_only=True)
     type_display = serializers.CharField(source='get_type_display', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
@@ -288,15 +296,6 @@ class CaissierDashboardSerializer(serializers.Serializer):
     today_transactions_count = serializers.IntegerField()
     last_receipt_number = serializers.CharField(allow_null=True)
     recent_transactions = TransactionSerializer(many=True)
-
-
-class SaisieDashboardSerializer(serializers.Serializer):
-    today_registered_count = serializers.IntegerField()
-    processing_amount = serializers.FloatField()
-    pending_approvals = serializers.IntegerField()
-    recent_settlements = SettlementSerializer(many=True)
-    open_invoices = InvoiceSerializer(many=True)
-
 
 # Report Serializers
 class FolioSummaryReportSerializer(serializers.Serializer):

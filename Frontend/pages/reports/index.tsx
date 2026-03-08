@@ -7,7 +7,7 @@ import {
     FileText, Filter, RefreshCw, DollarSign, Users, Building2, PieChart
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { transactionApi, Transaction, downloadFile } from '../../services/api';
+import { transactionApi, Transaction, downloadFile, reportPdfApi } from '../../services/api';
 
 export default function ReportsPage() {
     const { t } = useTranslation('common');
@@ -19,6 +19,7 @@ export default function ReportsPage() {
     const [dateTo, setDateTo] = useState('');
     const [typeFilter, setTypeFilter] = useState<string>('');
     const [activeReport, setActiveReport] = useState<'summary' | 'transactions' | 'methods'>('summary');
+    const [pdfLoading, setPdfLoading] = useState(false);
 
     // Set default date range (current month)
     useEffect(() => {
@@ -65,8 +66,20 @@ export default function ReportsPage() {
         }
     };
 
-    const handlePrint = () => {
-        window.print();
+    const handleDownloadPDF = async () => {
+        setPdfLoading(true);
+        try {
+            const blob = await reportPdfApi.downloadPDF({
+                date_from: dateFrom,
+                date_to: dateTo,
+                type: typeFilter || undefined,
+            });
+            downloadFile(blob, `rapport_tresorerie_${dateFrom}_${dateTo}.pdf`);
+        } catch (err) {
+            console.error('PDF error:', err);
+        } finally {
+            setPdfLoading(false);
+        }
     };
 
     const formatCurrency = (amount: number) => {
@@ -137,29 +150,40 @@ export default function ReportsPage() {
                         {t('reports.title')}
                     </h1>
                     <p className="text-gray-500 dark:text-gray-400">
-                        Analyses et rapports de trésorerie
+                        {t('reports.subtitle')}
                     </p>
                 </div>
 
-                <div className="flex gap-2">
-                    <button onClick={handleExportCSV} className="btn-secondary">
-                        <Download size={18} />
-                        {t('reports.export_csv')}
-                    </button>
-                    <button onClick={handlePrint} className="btn-primary">
-                        <Printer size={18} />
-                        {t('reports.print')}
-                    </button>
+                <div className="flex gap-2 print:hidden">
+                    {hasRole(['CAISSIER']) && (
+                        <button onClick={handleExportCSV} className="btn-secondary">
+                            <Download size={18} />
+                            {t('reports.export_csv')}
+                        </button>
+                    )}
+                    {hasRole(['ADMIN', 'GERANT']) && (
+                        <button onClick={handleDownloadPDF} className="btn-primary" disabled={pdfLoading}>
+                            {pdfLoading ? <span className="spinner" /> : <Printer size={18} />}
+                            {t('reports.print')}
+                        </button>
+                    )}
                 </div>
             </div>
 
             {/* Print Header */}
-            <div className="hidden print:block text-center mb-8">
-                <h1 className="text-2xl font-bold">NexaSolft Treasury</h1>
-                <h2 className="text-xl">Rapport de Trésorerie</h2>
-                <p className="text-gray-600">
-                    Période: {formatDate(dateFrom)} - {formatDate(dateTo)}
-                </p>
+            <div className="hidden print:block mb-8 border-b-2 border-slate-800 pb-4">
+                <div className="flex justify-between items-center mb-4">
+                    <div>
+                        <h1 className="text-3xl font-black text-slate-900 tracking-tight">NexaSolft<span className="text-blue-600">.</span></h1>
+                        <p className="text-sm text-slate-500 font-medium">Gestion de Trésorerie</p>
+                    </div>
+                    <div className="text-right">
+                        <h2 className="text-2xl font-bold text-slate-800 rtl:text-left">{t('reports.print_title')}</h2>
+                        <p className="text-slate-600 mt-1 rtl:text-left">
+                            {t('reports.period')} <span className="font-semibold">{formatDate(dateFrom)}</span> - <span className="font-semibold">{formatDate(dateTo)}</span>
+                        </p>
+                    </div>
+                </div>
             </div>
 
             {/* Filters - Hidden on print */}
@@ -187,7 +211,7 @@ export default function ReportsPage() {
                         onChange={(e) => setTypeFilter(e.target.value)}
                         className="select"
                     >
-                        <option value="">Tous les types</option>
+                        <option value="">{t('reports.all_types')}</option>
                         <option value="RECEIPT">{t('transaction.type_RECEIPT')}</option>
                         <option value="PAYMENT">{t('transaction.type_PAYMENT')}</option>
                     </select>
@@ -200,16 +224,16 @@ export default function ReportsPage() {
                 {/* Report Tabs */}
                 <div className="flex gap-2 mt-4">
                     {[
-                        { id: 'summary', label: 'Résumé', icon: <BarChart3 size={16} /> },
-                        { id: 'transactions', label: 'Transactions', icon: <FileText size={16} /> },
-                        { id: 'methods', label: 'Par méthode', icon: <PieChart size={16} /> },
+                        { id: 'summary', label: t('reports.tab_summary'), icon: <BarChart3 size={16} /> },
+                        { id: 'transactions', label: t('reports.tab_transactions'), icon: <FileText size={16} /> },
+                        { id: 'methods', label: t('reports.tab_methods'), icon: <PieChart size={16} /> },
                     ].map((tab) => (
                         <button
                             key={tab.id}
                             onClick={() => setActiveReport(tab.id as typeof activeReport)}
                             className={`px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2 transition-all ${activeReport === tab.id
-                                    ? 'bg-blue-500 text-white'
-                                    : 'bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200'
+                                ? 'bg-blue-500 text-white'
+                                : 'bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200'
                                 }`}
                         >
                             {tab.icon}
@@ -233,7 +257,7 @@ export default function ReportsPage() {
                         <div>
                             <p className="text-sm text-gray-500">{t('reports.total_in')}</p>
                             <p className="text-2xl font-bold text-emerald-600">+{formatCurrency(totalReceipts)}</p>
-                            <p className="text-xs text-gray-400">{receiptCount} transactions</p>
+                            <p className="text-xs text-gray-400">{receiptCount} {t('reports.transactions_label')}</p>
                         </div>
                     </div>
                 </motion.div>
@@ -251,7 +275,7 @@ export default function ReportsPage() {
                         <div>
                             <p className="text-sm text-gray-500">{t('reports.total_out')}</p>
                             <p className="text-2xl font-bold text-red-600">-{formatCurrency(totalPayments)}</p>
-                            <p className="text-xs text-gray-400">{paymentCount} transactions</p>
+                            <p className="text-xs text-gray-400">{paymentCount} {t('reports.transactions_label')}</p>
                         </div>
                     </div>
                 </motion.div>
@@ -281,7 +305,7 @@ export default function ReportsPage() {
                 <div className="card p-6">
                     <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
                         <BarChart3 size={20} />
-                        Résumé journalier
+                        {t('reports.daily_summary')}
                     </h3>
 
                     {loading ? (
@@ -291,16 +315,16 @@ export default function ReportsPage() {
                             ))}
                         </div>
                     ) : sortedDays.length === 0 ? (
-                        <p className="text-gray-500 text-center py-8">Aucune donnée pour cette période</p>
+                        <p className="text-gray-500 text-center py-8">{t('reports.no_data')}</p>
                     ) : (
                         <div className="overflow-x-auto">
                             <table className="table">
                                 <thead>
                                     <tr>
-                                        <th>Date</th>
+                                        <th>{t('common.date')}</th>
                                         <th className="text-right">{t('transaction.type_RECEIPT')}</th>
                                         <th className="text-right">{t('transaction.type_PAYMENT')}</th>
-                                        <th className="text-right">Solde</th>
+                                        <th className="text-right">{t('common.balance')}</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -325,7 +349,7 @@ export default function ReportsPage() {
                                 </tbody>
                                 <tfoot>
                                     <tr className="border-t-2 border-gray-200 dark:border-slate-600">
-                                        <td className="font-bold">Total</td>
+                                        <td className="font-bold">{t('common.total')}</td>
                                         <td className="text-right text-emerald-600 font-bold">+{formatCurrency(totalReceipts)}</td>
                                         <td className="text-right text-red-600 font-bold">-{formatCurrency(totalPayments)}</td>
                                         <td className={`text-right font-bold ${netBalance >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
@@ -344,7 +368,7 @@ export default function ReportsPage() {
                 <div className="card p-6">
                     <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
                         <FileText size={20} />
-                        Détail des transactions
+                        {t('reports.tx_details')}
                     </h3>
 
                     {loading ? (
@@ -354,18 +378,18 @@ export default function ReportsPage() {
                             ))}
                         </div>
                     ) : approvedTransactions.length === 0 ? (
-                        <p className="text-gray-500 text-center py-8">Aucune transaction pour cette période</p>
+                        <p className="text-gray-500 text-center py-8">{t('reports.no_tx_data')}</p>
                     ) : (
                         <div className="overflow-x-auto">
                             <table className="table text-sm">
                                 <thead>
                                     <tr>
-                                        <th>Date</th>
-                                        <th>Type</th>
-                                        <th>Montant</th>
-                                        <th>Méthode</th>
-                                        <th>Référence</th>
-                                        <th>Créé par</th>
+                                        <th>{t('common.date')}</th>
+                                        <th>{t('common.type')}</th>
+                                        <th>{t('common.amount')}</th>
+                                        <th>{t('common.method')}</th>
+                                        <th>{t('common.reference')}</th>
+                                        <th>{t('common.created_by')}</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -399,7 +423,7 @@ export default function ReportsPage() {
                 <div className="card p-6">
                     <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
                         <PieChart size={20} />
-                        Répartition par méthode de paiement
+                        {t('reports.method_breakdown')}
                     </h3>
 
                     {loading ? (
@@ -409,7 +433,7 @@ export default function ReportsPage() {
                             ))}
                         </div>
                     ) : Object.keys(methodBreakdown).length === 0 ? (
-                        <p className="text-gray-500 text-center py-8">Aucune donnée pour cette période</p>
+                        <p className="text-gray-500 text-center py-8">{t('reports.no_data')}</p>
                     ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {Object.entries(methodBreakdown).map(([method, data]) => (
@@ -439,12 +463,29 @@ export default function ReportsPage() {
                 </div>
             )}
 
-            {/* Print Footer */}
-            <div className="hidden print:block text-center mt-8 pt-4 border-t border-gray-300">
-                <p className="text-sm text-gray-600">
-                    Rapport généré le {new Date().toLocaleDateString('fr-FR')} à {new Date().toLocaleTimeString('fr-FR')}
-                </p>
-                <p className="text-sm text-gray-600">© {new Date().getFullYear()} NexaSolft - www.nexasoft.mr</p>
+            {/* Print Footer / Signatures */}
+            <div className="hidden print:block mt-16 pt-8 break-inside-avoid">
+                <div className="grid grid-cols-3 gap-8 text-center mb-16">
+                    <div>
+                        <p className="font-semibold text-slate-800 mb-16">{t('reports.signature_cashier')}</p>
+                        <div className="border-b border-slate-400 mx-8"></div>
+                    </div>
+                    <div>
+                        <p className="font-semibold text-slate-800 mb-16">{t('reports.signature_manager')}</p>
+                        <div className="border-b border-slate-400 mx-8"></div>
+                    </div>
+                    <div>
+                        <p className="font-semibold text-slate-800 mb-16">{t('reports.signature_admin')}</p>
+                        <div className="border-b border-slate-400 mx-8"></div>
+                    </div>
+                </div>
+
+                <div className="text-center pt-8 border-t border-slate-300">
+                    <p className="text-xs text-slate-500" suppressHydrationWarning>
+                        {t('reports.generated_on', { date: new Date().toLocaleDateString('fr-FR'), time: new Date().toLocaleTimeString('fr-FR') })}
+                    </p>
+                    <p className="text-xs text-slate-500 mt-1">© {new Date().getFullYear()} NexaSolft - www.nexasoft.mr</p>
+                </div>
             </div>
         </div>
     );

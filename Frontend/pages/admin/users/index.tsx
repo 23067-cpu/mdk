@@ -14,8 +14,6 @@ const roleBadge: Record<string, string> = {
     ADMIN: 'badge-danger',
     GERANT: 'badge-warning',
     CAISSIER: 'badge-info',
-    SAISIE_CLIENT: 'badge-success',
-    SAISIE_FOURNISSEUR: 'badge-neutral',
 };
 
 // Create/Edit User Modal

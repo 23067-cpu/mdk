@@ -20,9 +20,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const ROLE_HIERARCHY: Record<string, number> = {
     'ADMIN': 5,
     'GERANT': 4,
-    'CAISSIER': 3,
-    'SAISIE_CLIENT': 2,
-    'SAISIE_FOURNISSEUR': 2,
+    'CAISSIER': 3
 };
 
 // Routes accessible by each role
@@ -30,8 +28,7 @@ const ROLE_ROUTES: Record<string, string[]> = {
     'ADMIN': ['/dashboard', '/folios', '/transactions', '/settlements', '/invoices', '/reports', '/admin', '/admin/users', '/admin/settings', '/audit'],
     'GERANT': ['/dashboard', '/folios', '/transactions', '/settlements', '/invoices', '/reports', '/audit'],
     'CAISSIER': ['/dashboard', '/folios', '/transactions', '/settlements'],
-    'SAISIE_CLIENT': ['/dashboard', '/settlements', '/invoices'],
-    'SAISIE_FOURNISSEUR': ['/dashboard', '/settlements', '/invoices'],
+    'SAISIE_FACTURE': ['/dashboard', '/invoices'],
 };
 
 interface AuthProviderProps {
@@ -56,6 +53,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
                     if (response.success && response.user) {
                         setUser(response.user);
                         localStorage.setItem('user', JSON.stringify(response.user));
+                        // Apply the user's preferred language if it differs from current
+                        const prefLang = response.user.preferred_language || 'fr';
+                        if (router.locale !== prefLang && router.pathname !== '/' && router.pathname !== '/login') {
+                            document.documentElement.dir = prefLang === 'ar' ? 'rtl' : 'ltr';
+                            router.replace(router.pathname, router.asPath, { locale: prefLang });
+                        }
                     } else {
                         // Token invalid, clear storage
                         localStorage.removeItem('token');
@@ -96,8 +99,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
                 localStorage.setItem('user', JSON.stringify(response.user));
                 setUser(response.user);
 
-                // Redirect based on role
-                router.push('/dashboard');
+                // Apply the user's saved language preference
+                const prefLang = response.user.preferred_language || 'fr';
+                document.documentElement.dir = prefLang === 'ar' ? 'rtl' : 'ltr';
+
+                // Redirect to dashboard with the correct locale
+                router.push('/dashboard', '/dashboard', { locale: prefLang });
 
                 return { success: true };
             } else {
@@ -160,10 +167,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
                     return await dashboardApi.getGerantDashboard();
                 case 'CAISSIER':
                     return await dashboardApi.getCaissierDashboard();
-                case 'SAISIE_CLIENT':
-                    return await dashboardApi.getSaisieClientDashboard();
-                case 'SAISIE_FOURNISSEUR':
-                    return await dashboardApi.getSaisieFournisseurDashboard();
                 default:
                     return null;
             }
@@ -255,21 +258,15 @@ export const ROLE_LABELS: Record<string, Record<string, string>> = {
         'ADMIN': 'Administrateur',
         'GERANT': 'Gérant',
         'CAISSIER': 'Caissier',
-        'SAISIE_CLIENT': 'Saisie Client',
-        'SAISIE_FOURNISSEUR': 'Saisie Fournisseur',
     },
     ar: {
         'ADMIN': 'مدير النظام',
         'GERANT': 'المدير',
         'CAISSIER': 'أمين الصندوق',
-        'SAISIE_CLIENT': 'إدخال العملاء',
-        'SAISIE_FOURNISSEUR': 'إدخال الموردين',
     },
     en: {
         'ADMIN': 'Administrator',
         'GERANT': 'Manager',
         'CAISSIER': 'Cashier',
-        'SAISIE_CLIENT': 'Client Entry',
-        'SAISIE_FOURNISSEUR': 'Supplier Entry',
     },
 };

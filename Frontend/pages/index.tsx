@@ -1,64 +1,79 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import { useTranslation } from 'next-i18next';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
-import { motion } from 'framer-motion';
-import Image from 'next/image';
+import { motion, useScroll, useTransform } from 'framer-motion';
 import Link from 'next/link';
 import {
     Shield, TrendingUp, Users, FileText, BarChart3,
-    Globe, Lock, Smartphone, ArrowRight,
-    Facebook, Mail, MessageCircle, ExternalLink
+    Globe, Lock, ArrowRight,
+    Facebook, Mail, MessageCircle, ExternalLink, ChevronRight
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { settingsApi } from '../services/api';
 
 const features = [
     {
         icon: Shield,
-        title: { fr: 'Sécurité Avancée', ar: 'أمان متقدم', en: 'Advanced Security' },
-        desc: { fr: 'Contrôle d\'accès basé sur les rôles', ar: 'تحكم بالوصول حسب الأدوار', en: 'Role-based access control' },
+        title: { fr: 'Sécurité Bancaire', ar: 'أمان بنكي', en: 'Bank-grade Security' },
+        desc: { fr: 'Chiffrement de bout en bout et gestion granulaire des accès.', ar: 'تشفير شامل وإدارة دقيقة للوصول.', en: 'End-to-end encryption and granular access control.' },
     },
     {
         icon: TrendingUp,
-        title: { fr: 'Suivi en Temps Réel', ar: 'تتبع فوري', en: 'Real-time Tracking' },
-        desc: { fr: 'Surveillance des flux de trésorerie', ar: 'مراقبة التدفقات النقدية', en: 'Cash flow monitoring' },
+        title: { fr: 'Visibilité Temps Réel', ar: 'رؤية فورية', en: 'Real-time Visibility' },
+        desc: { fr: 'Suivez vos flux de trésorerie avec une précision chirurgicale.', ar: 'تتبع تدفقاتك النقدية بدقة جراحية.', en: 'Track cash flows with surgical precision.' },
     },
     {
         icon: Users,
-        title: { fr: 'Multi-utilisateurs', ar: 'متعدد المستخدمين', en: 'Multi-user' },
-        desc: { fr: '5 rôles avec permissions distinctes', ar: '5 أدوار بصلاحيات مختلفة', en: '5 roles with distinct permissions' },
+        title: { fr: 'Collaboration Multi-rôles', ar: 'تعاون متعدد الأدوار', en: 'Multi-role Collaboration' },
+        desc: { fr: 'Des workflows adaptés pour Administrateurs, Gérants et Caissiers.', ar: 'مسارات عمل مخصصة للمديرين والمحاسبين والصرافين.', en: 'Tailored workflows for Admins, Managers, and Cashiers.' },
     },
     {
         icon: FileText,
-        title: { fr: 'Rapports Détaillés', ar: 'تقارير مفصلة', en: 'Detailed Reports' },
-        desc: { fr: 'Export PDF, Excel, CSV', ar: 'تصدير PDF, Excel, CSV', en: 'Export to PDF, Excel, CSV' },
+        title: { fr: 'Traçabilité Absolue', ar: 'تتبع مطلق', en: 'Absolute Traceability' },
+        desc: { fr: 'Chaque action est enregistrée et auditable en un clic.', ar: 'يتم تسجيل كل إجراء ويمكن التدقيق فيه بنقرة واحدة.', en: 'Every action is logged and auditable in one click.' },
     },
     {
         icon: BarChart3,
-        title: { fr: 'Tableaux de Bord', ar: 'لوحات تحكم', en: 'Dashboards' },
-        desc: { fr: 'KPIs personnalisés par rôle', ar: 'مؤشرات مخصصة لكل دور', en: 'Role-specific KPIs' },
+        title: { fr: 'Analyses Intelligentes', ar: 'تحليلات ذكية', en: 'Smart Analytics' },
+        desc: { fr: 'Tableaux de bord dynamiques pour des décisions éclairées.', ar: 'لوحات تحكم ديناميكية لقرارات مستنيرة.', en: 'Dynamic dashboards for informed decision-making.' },
     },
     {
         icon: Globe,
-        title: { fr: 'Multilingue', ar: 'متعدد اللغات', en: 'Multilingual' },
-        desc: { fr: 'Français, Arabe, Anglais', ar: 'فرنسية، عربية، إنجليزية', en: 'French, Arabic, English' },
+        title: { fr: 'Déploiement Global', ar: 'نشر عالمي', en: 'Global Deployment' },
+        desc: { fr: 'Interface 100% multilingue et support multi-devises intégré.', ar: 'واجهة متعددة اللغات 100٪ ودعم مدمج للعملات المتعددة.', en: '100% multilingual interface and built-in multi-currency support.' },
     },
 ];
-
-const companyInfo = {
-    facebook: 'https://web.facebook.com/nexasoft.mr',
-    email: 'info@nexasoft.mr',
-    whatsapp: 'https://wa.me/22227736247',
-    website: 'https://www.nexasoft.mr',
-};
 
 export default function HomePage() {
     const { t, i18n } = useTranslation('common');
     const router = useRouter();
     const { isAuthenticated, isLoading } = useAuth();
     const lang = (i18n.language || 'fr') as 'fr' | 'ar' | 'en';
+    const { scrollY } = useScroll();
+    const y1 = useTransform(scrollY, [0, 1000], [0, 200]);
+    const y2 = useTransform(scrollY, [0, 1000], [0, -200]);
 
-    // Redirect authenticated users to dashboard
+    const [companyInfo, setCompanyInfo] = useState({
+        name: 'NexaSolft',
+        logo: '/Nexasoft.png',
+        website: 'https://www.nexasoft.mr',
+        facebook: 'https://web.facebook.com/nexasoft.mr',
+        email: 'info@nexasoft.mr',
+        whatsapp: 'https://wa.me/22227736247'
+    });
+
+    useEffect(() => {
+        settingsApi.getPublic().then(data => {
+            if (data?.company) {
+                setCompanyInfo(prev => ({
+                    ...prev,
+                    ...data.company
+                }));
+            }
+        }).catch(e => console.error('Failed to load public settings', e));
+    }, []);
+
     useEffect(() => {
         if (!isLoading && isAuthenticated) {
             router.push('/dashboard');
@@ -67,249 +82,184 @@ export default function HomePage() {
 
     if (isLoading) {
         return (
-            <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 to-blue-900">
-                <div className="animate-spin rounded-full h-12 w-12 border-4 border-white border-t-transparent" />
+            <div className="min-h-screen flex items-center justify-center bg-[#0A0F1C]">
+                <div className="w-12 h-12 border-2 border-blue-500/20 border-t-blue-500 rounded-full animate-spin" />
             </div>
         );
     }
 
     return (
         <div
-            className="min-h-screen relative overflow-hidden"
+            className="min-h-screen relative overflow-x-hidden bg-[#0A0F1C] font-sans selection:bg-blue-500/30 text-white"
             dir={lang === 'ar' ? 'rtl' : 'ltr'}
-            style={{ background: 'linear-gradient(135deg, #0f172a 0%, #0f2744 50%, #0f172a 100%)' }}
         >
-            {/* Animated Background */}
-            <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                {/* Animated Grid */}
+            {/* Ambient Background */}
+            <div className="fixed inset-0 z-0 pointer-events-none">
+                <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-blue-600/10 blur-[150px] rounded-full mix-blend-screen" />
+                <div className="absolute top-[20%] right-[-10%] w-[40%] h-[60%] bg-cyan-600/10 blur-[150px] rounded-full mix-blend-screen" />
+                <div className="absolute bottom-[-20%] left-[20%] w-[60%] h-[40%] bg-purple-600/10 blur-[150px] rounded-full mix-blend-screen" />
                 <div
-                    className="absolute inset-0 opacity-[0.03]"
-                    style={{
-                        backgroundImage: `linear-gradient(rgba(30, 90, 235, 0.5) 1px, transparent 1px),
-                                         linear-gradient(90deg, rgba(30, 90, 235, 0.5) 1px, transparent 1px)`,
-                        backgroundSize: '60px 60px'
-                    }}
-                />
-
-                {/* Floating Orbs */}
-                <motion.div
-                    animate={{
-                        y: [0, -40, 0],
-                        opacity: [0.15, 0.25, 0.15]
-                    }}
-                    transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
-                    className="absolute top-1/4 left-1/4 w-[600px] h-[600px] rounded-full"
-                    style={{
-                        background: 'radial-gradient(circle, rgba(30, 90, 235, 0.4) 0%, transparent 70%)',
-                        filter: 'blur(100px)'
-                    }}
-                />
-                <motion.div
-                    animate={{
-                        y: [0, 30, 0],
-                        x: [0, -20, 0],
-                        opacity: [0.1, 0.2, 0.1]
-                    }}
-                    transition={{ duration: 12, repeat: Infinity, ease: "easeInOut", delay: 1 }}
-                    className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] rounded-full"
-                    style={{
-                        background: 'radial-gradient(circle, rgba(14, 165, 233, 0.4) 0%, transparent 70%)',
-                        filter: 'blur(80px)'
-                    }}
-                />
-                <motion.div
-                    animate={{
-                        y: [0, 20, 0],
-                        opacity: [0.08, 0.15, 0.08]
-                    }}
-                    transition={{ duration: 14, repeat: Infinity, ease: "easeInOut", delay: 2 }}
-                    className="absolute top-2/3 left-1/3 w-[400px] h-[400px] rounded-full"
-                    style={{
-                        background: 'radial-gradient(circle, rgba(212, 165, 116, 0.3) 0%, transparent 70%)',
-                        filter: 'blur(60px)'
-                    }}
+                    className="absolute inset-0 opacity-[0.015]"
+                    style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")` }}
                 />
             </div>
 
-            {/* Header */}
-            <header className="relative z-10">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-                    <div className="flex items-center justify-between">
-                        <motion.div
-                            initial={{ opacity: 0, x: -20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            transition={{ duration: 0.6 }}
-                            className="flex items-center gap-3"
-                        >
-                            <div className="relative">
-                                <div className="absolute inset-0 bg-blue-500/20 rounded-xl blur-xl scale-150" />
-                                <Image
-                                    src="/Nexasoft.png"
-                                    alt="NexaSolft"
-                                    width={48}
-                                    height={48}
-                                    className="rounded-xl relative z-10"
-                                />
-                            </div>
-                            <span className="text-2xl font-bold text-white">NexaSolft Treasury</span>
-                        </motion.div>
+            {/* Navigation Header */}
+            <header className="fixed top-0 inset-x-0 z-50 border-b border-white/[0.05] bg-[#0A0F1C]/70 backdrop-blur-xl transition-all duration-300">
+                <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+                    <motion.div
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        className="flex items-center gap-3"
+                    >
+                        <img src={companyInfo.logo} alt="Logo" className="w-10 h-10 object-contain rounded-xl bg-white/5 p-1.5 border border-white/10" />
+                        <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-white/70">
+                            {companyInfo.name} Treasury
+                        </span>
+                    </motion.div>
 
-                        <motion.div
-                            initial={{ opacity: 0, x: 20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            transition={{ duration: 0.6 }}
-                            className="flex items-center gap-4"
-                        >
-                            {/* Language Switcher */}
-                            <div className="flex items-center gap-1 bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl p-1">
-                                {['fr', 'ar', 'en'].map((lng) => (
-                                    <button
-                                        key={lng}
-                                        onClick={() => router.push(router.pathname, router.asPath, { locale: lng })}
-                                        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${i18n.language === lng
-                                            ? 'bg-white text-slate-900'
-                                            : 'text-white/60 hover:text-white'
-                                            }`}
-                                    >
-                                        {lng.toUpperCase()}
-                                    </button>
-                                ))}
-                            </div>
+                    <motion.div
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        className="flex items-center gap-4 sm:gap-6"
+                    >
+                        <div className="hidden sm:flex items-center gap-1 bg-white/[0.03] border border-white/[0.05] rounded-xl p-1">
+                            {[
+                                { code: 'fr', icon: <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 480" className="w-6 h-4 rounded-sm shadow-sm object-cover"><path fill="#fff" d="M0 0h640v480H0z" /><path fill="#002654" d="M0 0h213.3v480H0z" /><path fill="#ce1126" d="M426.7 0h213.3v480H426.7z" /></svg> },
+                                { code: 'ar', icon: <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 480" className="w-6 h-4 rounded-sm shadow-sm object-cover"><path fill="#006233" d="M0 0h640v480H0z" /><path fill="#ffc400" d="M320 102.9L350.2 186l88.4-5.3-67 55.4 20.8 85.8-72.4-46.7-72.4 46.7 20.8-85.8-67-55.4 88.4 5.3z" /><path fill="#d21034" d="M0 0h640v48H0zm0 432h640v48H0z" /></svg> },
+                                { code: 'en', icon: <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 480" className="w-6 h-4 rounded-sm shadow-sm object-cover"><path fill="#012169" d="M0 0h640v480H0z" /><path fill="#FFF" d="M75 0l244 181L562 0h78v62L400 241l240 178v61h-80L320 301 81 480H0v-60l239-178L0 64V0h75z" /><path fill="#C8102E" d="M424 281l216 159v40L369 281h55zm-184 20l6 5L54 480H0l240-179zM640 0v3L391 191l2-44L590 0h50zM0 0l239 176h-60L0 42V0z" /><path fill="#FFF" d="M241 0v480h160V0H241zM0 160v160h640V160H0z" /><path fill="#C8102E" d="M0 193v96h640v-96H0zM273 0v480h96V0h-96z" /></svg> }
+                            ].map((l) => (
+                                <button
+                                    key={l.code}
+                                    onClick={() => router.push(router.pathname, router.asPath, { locale: l.code })}
+                                    className={`px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-2 transition-all ${i18n.language === l.code ? 'bg-white/10 text-white shadow-sm' : 'text-white/50 hover:text-white/80'
+                                        }`}
+                                >
+                                    <span>{l.icon}</span>
+                                    <span className="hidden md:inline">{l.code.toUpperCase()}</span>
+                                </button>
+                            ))}
+                        </div>
 
-                            <Link
-                                href="/login"
-                                className="flex items-center gap-2 px-5 py-2.5 text-white rounded-xl font-semibold transition-all hover:-translate-y-0.5"
-                                style={{
-                                    background: 'linear-gradient(135deg, #1e5aeb 0%, #0ea5e9 100%)',
-                                    boxShadow: '0 8px 32px -8px rgba(30, 90, 235, 0.5)'
-                                }}
-                            >
-                                <Lock size={18} />
-                                {t('auth.login')}
-                            </Link>
-                        </motion.div>
-                    </div>
+                        <Link
+                            href="/login"
+                            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white bg-white/5 border border-white/10 hover:bg-white/10 hover:scale-105 transition-all duration-300"
+                        >
+                            <Lock size={16} className="text-blue-400" />
+                            {t('auth.login')}
+                        </Link>
+                    </motion.div>
                 </div>
             </header>
 
             {/* Hero Section */}
-            <section className="relative pt-20 pb-32">
-                <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="text-center">
-                        <motion.div
-                            initial={{ opacity: 0, y: 40 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-                        >
-                            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold mb-6 leading-tight">
-                                <span className="bg-gradient-to-r from-white via-blue-100 to-white bg-clip-text text-transparent">
-                                    {lang === 'ar' ? 'نظام إدارة الخزينة المتكامل' :
-                                        lang === 'en' ? 'Complete Treasury Management System' :
-                                            'Système de Gestion de Trésorerie Complet'}
-                                </span>
-                            </h1>
-                            <p className="text-xl text-blue-200/70 max-w-3xl mx-auto mb-12 leading-relaxed">
-                                {lang === 'ar' ? 'إدارة احترافية للتدفقات النقدية مع تحكم دقيق بالصلاحيات وتتبع كامل للعمليات' :
-                                    lang === 'en' ? 'Professional cash flow management with granular permissions and complete audit trail' :
-                                        'Gestion professionnelle des flux de trésorerie avec contrôle granulaire des permissions et traçabilité complète'}
-                            </p>
-                        </motion.div>
+            <section className="relative pt-40 pb-24 lg:pt-52 lg:pb-32 z-10 px-6">
+                <div className="max-w-7xl mx-auto text-center">
+                    <motion.div
+                        initial={{ opacity: 0, y: 30 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+                        className="inline-block mb-6 px-4 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-300 text-sm font-semibold tracking-wide"
+                    >
+                        {t('landing.badge')}
+                    </motion.div>
 
-                        <motion.div
-                            initial={{ opacity: 0, y: 30 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ duration: 0.8, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
-                            className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16"
-                        >
-                            <Link
-                                href="/login"
-                                className="group flex items-center gap-2 px-8 py-4 text-white rounded-2xl font-bold text-lg transition-all hover:-translate-y-1 relative overflow-hidden"
-                                style={{
-                                    background: 'linear-gradient(135deg, #1e5aeb 0%, #0ea5e9 100%)',
-                                    boxShadow: '0 12px 40px -8px rgba(30, 90, 235, 0.5)'
-                                }}
-                            >
-                                <span className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
-                                <span className="relative z-10">{t('landing.get_started')}</span>
-                                <ArrowRight size={20} className="relative z-10" />
-                            </Link>
-                            <a
-                                href={companyInfo.website}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="flex items-center gap-2 px-8 py-4 bg-white/5 backdrop-blur-sm border border-white/10 text-white rounded-2xl font-semibold text-lg hover:bg-white/10 hover:border-white/20 transition-all"
-                            >
-                                {t('landing.learn_more')}
-                                <ExternalLink size={18} />
-                            </a>
-                        </motion.div>
+                    <motion.h1
+                        initial={{ opacity: 0, y: 30 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.8, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
+                        className="text-5xl md:text-6xl lg:text-7xl font-bold mb-8 tracking-tight leading-[1.1] max-w-5xl mx-auto"
+                    >
+                        {t('landing.hero_title_1')}{' '}
+                        <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-cyan-400 to-blue-400">
+                            {t('landing.hero_title_highlight')}
+                        </span>{' '}
+                        {t('landing.hero_title_2')}
+                    </motion.h1>
 
-                        {/* Stats */}
-                        <motion.div
-                            initial={{ opacity: 0, y: 30 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ duration: 0.8, delay: 0.4, ease: [0.16, 1, 0.3, 1] }}
-                            className="flex flex-wrap items-center justify-center gap-8 sm:gap-16"
+                    <motion.p
+                        initial={{ opacity: 0, y: 30 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.8, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
+                        className="text-xl text-white/50 max-w-3xl mx-auto mb-12 leading-relaxed"
+                    >
+                        {t('landing.hero_desc')}
+                    </motion.p>
+
+                    <motion.div
+                        initial={{ opacity: 0, y: 30 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.8, delay: 0.3, ease: [0.16, 1, 0.3, 1] }}
+                        className="flex flex-col sm:flex-row items-center justify-center gap-5"
+                    >
+                        <Link
+                            href="/login"
+                            className="group relative flex items-center justify-center gap-2 px-8 py-4 rounded-full font-bold text-white overflow-hidden w-full sm:w-auto shadow-[0_0_40px_-10px_rgba(59,130,246,0.4)]"
                         >
-                            {[
-                                { value: '5', label: lang === 'ar' ? 'أدوار' : lang === 'en' ? 'Roles' : 'Rôles' },
-                                { value: '3', label: lang === 'ar' ? 'لغات' : lang === 'en' ? 'Languages' : 'Langues' },
-                                { value: '∞', label: lang === 'ar' ? 'معاملات' : lang === 'en' ? 'Transactions' : 'Transactions' },
-                            ].map((stat, index) => (
-                                <div key={index} className="text-center">
-                                    <div className="text-4xl sm:text-5xl font-bold text-white mb-1">{stat.value}</div>
-                                    <div className="text-blue-200/60 text-sm uppercase tracking-wider">{stat.label}</div>
-                                </div>
-                            ))}
-                        </motion.div>
-                    </div>
+                            <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-cyan-500 transition-all duration-300 group-hover:scale-105" />
+                            <div className="absolute top-0 inset-x-0 h-px bg-white/40" />
+                            <span className="relative z-10">{t('landing.get_started')}</span>
+                            <ArrowRight size={20} className="relative z-10 group-hover:translate-x-1 transition-transform" />
+                        </Link>
+
+                        <a
+                            href={companyInfo.website}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center justify-center gap-2 px-8 py-4 rounded-full font-semibold text-white bg-white/[0.03] border border-white/[0.08] hover:bg-white/[0.08] transition-all w-full sm:w-auto"
+                        >
+                            <span>{t('landing.discover')} {companyInfo.name}</span>
+                            <ExternalLink size={18} className="text-white/50" />
+                        </a>
+                    </motion.div>
                 </div>
             </section>
 
-            {/* Features Grid */}
-            <section className="relative py-24">
-                <div className="absolute inset-0 bg-white/[0.02] backdrop-blur-sm" />
-                <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <motion.div
-                        initial={{ opacity: 0, y: 30 }}
-                        whileInView={{ opacity: 1, y: 0 }}
-                        viewport={{ once: true }}
-                        className="text-center mb-16"
-                    >
-                        <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4">
-                            {lang === 'ar' ? 'مميزات النظام' :
-                                lang === 'en' ? 'System Features' :
-                                    'Fonctionnalités du Système'}
-                        </h2>
-                        <p className="text-blue-200/60 text-lg max-w-2xl mx-auto">
-                            {lang === 'ar' ? 'حلول متكاملة لجميع احتياجات إدارة الخزينة' :
-                                lang === 'en' ? 'Complete solutions for all treasury management needs' :
-                                    'Solutions complètes pour tous vos besoins de trésorerie'}
-                        </p>
-                    </motion.div>
+            {/* Stats Separator */}
+            <div className="relative z-10 max-w-7xl mx-auto px-6 mb-32">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-8 rounded-3xl bg-white/[0.02] border border-white/[0.05] backdrop-blur-md">
+                    {[
+                        { v: 'Multi', l: t('landing.stat_roles') },
+                        { v: '100%', l: t('landing.stat_trace') },
+                        { v: 'Temps réel', l: t('landing.stat_analytics') },
+                        { v: '256-bit', l: t('landing.stat_crypto') }
+                    ].map((stat, i) => (
+                        <div key={i} className="text-center">
+                            <div className="text-3xl lg:text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-white/70 mb-2">{stat.v}</div>
+                            <div className="text-sm font-medium text-white/40 uppercase tracking-widest">{stat.l}</div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            {/* Features Section */}
+            <section className="relative z-10 py-20 px-6">
+                <div className="max-w-7xl mx-auto">
+                    <div className="text-center mb-20">
+                        <h2 className="text-3xl md:text-5xl font-bold mb-6 tracking-tight">{t('landing.architecture_title')} <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-cyan-400">{t('landing.architecture_highlight')}</span></h2>
+                        <p className="text-lg text-white/50 max-w-2xl mx-auto">{t('landing.architecture_desc')}</p>
+                    </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {features.map((feature, index) => {
+                        {features.map((feature, idx) => {
                             const Icon = feature.icon;
                             return (
                                 <motion.div
-                                    key={index}
-                                    initial={{ opacity: 0, y: 30 }}
+                                    key={idx}
+                                    initial={{ opacity: 0, y: 20 }}
                                     whileInView={{ opacity: 1, y: 0 }}
-                                    viewport={{ once: true }}
-                                    transition={{ delay: index * 0.1, duration: 0.5 }}
-                                    whileHover={{ y: -4 }}
-                                    className="group relative p-6 bg-white/[0.03] backdrop-blur-sm rounded-2xl border border-white/10 hover:bg-white/[0.06] hover:border-white/20 transition-all duration-300"
+                                    viewport={{ once: true, margin: "-50px" }}
+                                    transition={{ duration: 0.5, delay: idx * 0.1 }}
+                                    className="group relative p-8 rounded-3xl bg-white/[0.02] border border-white/[0.05] hover:bg-white/[0.04] transition-all duration-500 overflow-hidden text-left rtl:text-right"
                                 >
-                                    {/* Gradient glow on hover */}
-                                    <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-blue-500/0 to-cyan-500/0 group-hover:from-blue-500/5 group-hover:to-cyan-500/5 transition-all duration-300" />
+                                    <div className="absolute -inset-0.5 bg-gradient-to-br from-blue-500/0 to-cyan-500/0 group-hover:from-blue-500/10 group-hover:to-cyan-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500 blur-xl" />
 
                                     <div className="relative z-10">
-                                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500/20 to-cyan-500/20 flex items-center justify-center mb-4 group-hover:from-blue-500/30 group-hover:to-cyan-500/30 transition-all duration-300">
-                                            <Icon className="text-blue-300 group-hover:text-blue-200 transition-colors" size={24} />
+                                        <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mb-6 shadow-xl shadow-black/20 group-hover:scale-110 transition-transform duration-500">
+                                            <Icon className="text-blue-400" size={26} strokeWidth={1.5} />
                                         </div>
-                                        <h3 className="text-lg font-semibold text-white mb-2">{feature.title[lang]}</h3>
-                                        <p className="text-blue-200/60 text-sm">{feature.desc[lang]}</p>
+                                        <h3 className="text-xl font-bold text-white mb-3 tracking-wide">{feature.title[lang]}</h3>
+                                        <p className="text-white/50 leading-relaxed text-sm">{feature.desc[lang]}</p>
                                     </div>
                                 </motion.div>
                             );
@@ -318,45 +268,52 @@ export default function HomePage() {
                 </div>
             </section>
 
-            {/* Contact Footer */}
-            <footer className="relative py-12 border-t border-white/10">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="flex flex-col lg:flex-row items-center justify-between gap-8">
-                        {/* Logo and Copyright */}
+            {/* CTA Section */}
+            <section className="relative z-10 py-32 px-6">
+                <div className="max-w-5xl mx-auto text-center">
+                    <div className="relative p-12 lg:p-20 rounded-[3rem] bg-gradient-to-b from-blue-900/40 to-cyan-900/10 border border-blue-500/20 overflow-hidden">
+                        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-blue-400/20 via-transparent to-transparent opacity-50" />
+
+                        <div className="relative z-10">
+                            <h2 className="text-4xl lg:text-5xl font-bold mb-6 text-white tracking-tight">Prêt à transformer votre gestion ?</h2>
+                            <p className="text-lg text-blue-200/60 mb-10 max-w-2xl mx-auto">Rejoignez l'écosystème NexaSolft et dotez votre organisation des meilleurs outils financiers de leur catégorie.</p>
+
+                            <Link
+                                href="/login"
+                                className="inline-flex items-center gap-3 px-10 py-5 rounded-full font-bold text-slate-900 bg-white hover:bg-gray-100 transition-colors shadow-[0_0_50px_-10px_rgba(255,255,255,0.4)]"
+                            >
+                                <span>{t('landing.get_started')}</span>
+                                <ChevronRight size={20} className="text-slate-500" />
+                            </Link>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            {/* Footer */}
+            <footer className="relative z-10 border-t border-white/[0.05] bg-[#0A0F1C] pt-16 pb-8 px-6">
+                <div className="max-w-7xl mx-auto">
+                    <div className="flex flex-col md:flex-row justify-between items-center gap-8 mb-12">
                         <div className="flex items-center gap-4">
-                            <Image
-                                src="/Nexasoft.png"
-                                alt="NexaSolft"
-                                width={40}
-                                height={40}
-                                className="rounded-lg"
-                            />
-                            <div>
-                                <p className="text-white font-semibold">NexaSolft</p>
-                                <p className="text-blue-200/50 text-sm">© {new Date().getFullYear()} All rights reserved</p>
-                            </div>
+                            <img src={companyInfo.logo} alt="NexaSolft" className="w-12 h-12 grayscale opacity-50 hover:grayscale-0 hover:opacity-100 transition-all rounded-xl border border-white/5 bg-white/5 p-1" />
+                            <span className="text-xl font-bold text-white/50">{companyInfo.name}</span>
                         </div>
 
-                        {/* Contact Links */}
-                        <div className="flex items-center gap-6">
-                            {[
-                                { href: companyInfo.facebook, icon: Facebook, label: 'Facebook' },
-                                { href: `mailto:${companyInfo.email}`, icon: Mail, label: companyInfo.email },
-                                { href: companyInfo.whatsapp, icon: MessageCircle, label: 'WhatsApp' },
-                                { href: companyInfo.website, icon: Globe, label: 'Website' },
-                            ].map((item, index) => (
-                                <a
-                                    key={index}
-                                    href={item.href}
-                                    target={item.href.startsWith('mailto') ? undefined : '_blank'}
-                                    rel="noopener noreferrer"
-                                    className="flex items-center gap-2 text-blue-200/50 hover:text-white transition-colors duration-300"
-                                >
-                                    <item.icon size={20} />
-                                    <span className="hidden sm:inline text-sm">{item.label}</span>
-                                </a>
-                            ))}
+                        <div className="flex flex-wrapjustify-center gap-8">
+                            <a href={`mailto:${companyInfo.email}`} className="text-sm font-medium text-white/40 hover:text-white transition-colors flex items-center gap-2">
+                                <Mail size={16} /> Contact
+                            </a>
+                            <a href={companyInfo.facebook} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-white/40 hover:text-white transition-colors flex items-center gap-2">
+                                <Facebook size={16} /> Facebook
+                            </a>
+                            <a href={companyInfo.whatsapp.startsWith('http') ? companyInfo.whatsapp : `https://wa.me/${companyInfo.whatsapp.replace(/[^0-9]/g, '')}`} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-white/40 hover:text-white transition-colors flex items-center gap-2">
+                                <MessageCircle size={16} /> WhatsApp
+                            </a>
                         </div>
+                    </div>
+
+                    <div className="text-center text-xs font-medium text-white/20 pt-8 border-t border-white/[0.05]">
+                        © {new Date().getFullYear()} {companyInfo.name}. {t('login.rights')}
                     </div>
                 </div>
             </footer>

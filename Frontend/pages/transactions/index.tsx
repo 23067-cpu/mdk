@@ -7,10 +7,11 @@ import Link from 'next/link';
 import {
     Plus, Search, Filter, TrendingUp, TrendingDown,
     Calendar, RefreshCw, Printer, XCircle, Download,
-    FileText, ChevronDown, Eye, CheckCircle, Clock, AlertTriangle
+    FileText, ChevronDown, Eye, CheckCircle, Clock, AlertTriangle, ThumbsUp, ThumbsDown
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { transactionApi, folioApi, Transaction, Folio, downloadFile } from '../../services/api';
+import { transactionApi, folioApi, reportPdfApi, Transaction, Folio, downloadFile } from '../../services/api';
+import TransactionModal from '../../components/TransactionModal';
 
 // Status badges
 const statusBadge: Record<string, string> = {
@@ -107,8 +108,7 @@ function VoidModal({ isOpen, transaction, onClose, onSuccess }: VoidModalProps) 
                                 className="input"
                                 rows={4}
                                 required
-                                minLength={10}
-                                placeholder="Expliquez la raison de l'annulation (minimum 10 caractères)..."
+                                placeholder={t('transaction.void_reason_placeholder')}
                             />
                         </div>
 
@@ -131,241 +131,11 @@ function VoidModal({ isOpen, transaction, onClose, onSuccess }: VoidModalProps) 
     );
 }
 
-// Create Transaction Modal
-interface CreateTransactionModalProps {
-    isOpen: boolean;
-    defaultType?: 'RECEIPT' | 'PAYMENT';
-    folioId?: number;
-    onClose: () => void;
-    onSuccess: () => void;
-}
-
-function CreateTransactionModal({ isOpen, defaultType, folioId, onClose, onSuccess }: CreateTransactionModalProps) {
-    const { t } = useTranslation('common');
-    const [type, setType] = useState<'RECEIPT' | 'PAYMENT'>(defaultType || 'RECEIPT');
-    const [amount, setAmount] = useState('');
-    const [paymentMethod, setPaymentMethod] = useState('CASH');
-    const [reference, setReference] = useState('');
-    const [description, setDescription] = useState('');
-    const [clientName, setClientName] = useState('');
-    const [selectedFolio, setSelectedFolio] = useState<number | null>(folioId || null);
-    const [folios, setFolios] = useState<Folio[]>([]);
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState('');
-
-    useEffect(() => {
-        if (isOpen) {
-            folioApi.list({ status: 'OPEN' }).then(setFolios).catch(console.error);
-            if (defaultType) setType(defaultType);
-            if (folioId) setSelectedFolio(folioId);
-        }
-    }, [isOpen, defaultType, folioId]);
-
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!selectedFolio) {
-            setError('Veuillez sélectionner un folio');
-            return;
-        }
-
-        setError('');
-        setLoading(true);
-
-        try {
-            const result = await transactionApi.create({
-                folio: selectedFolio,
-                type,
-                amount: parseFloat(amount),
-                payment_method: paymentMethod,
-                reference: reference || undefined,
-                description: description || undefined,
-                client_name: type === 'RECEIPT' ? clientName || undefined : undefined,
-                supplier_name: type === 'PAYMENT' ? clientName || undefined : undefined,
-            });
-
-            if (result.success) {
-                onSuccess();
-                onClose();
-                // Reset form
-                setAmount('');
-                setReference('');
-                setDescription('');
-                setClientName('');
-            } else {
-                setError(result.message || 'Error');
-            }
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'Error');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    if (!isOpen) return null;
-
-    return (
-        <div className="modal-overlay" onClick={onClose}>
-            <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="modal-content max-w-xl"
-                onClick={(e) => e.stopPropagation()}
-            >
-                <div className="p-6">
-                    <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-6">
-                        {t('transaction.create')}
-                    </h2>
-
-                    {error && (
-                        <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 rounded-xl text-red-700 text-sm">
-                            {error}
-                        </div>
-                    )}
-
-                    <form onSubmit={handleSubmit} className="space-y-4">
-                        {/* Transaction Type */}
-                        <div className="grid grid-cols-2 gap-3">
-                            <button
-                                type="button"
-                                onClick={() => setType('RECEIPT')}
-                                className={`p-4 rounded-xl border-2 flex items-center justify-center gap-2 transition-all ${type === 'RECEIPT'
-                                    ? 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20'
-                                    : 'border-gray-200 dark:border-slate-700 hover:border-gray-300'
-                                    }`}
-                            >
-                                <TrendingUp size={20} />
-                                {t('transaction.type_RECEIPT')}
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setType('PAYMENT')}
-                                className={`p-4 rounded-xl border-2 flex items-center justify-center gap-2 transition-all ${type === 'PAYMENT'
-                                    ? 'border-red-500 bg-red-50 text-red-700 dark:bg-red-900/20'
-                                    : 'border-gray-200 dark:border-slate-700 hover:border-gray-300'
-                                    }`}
-                            >
-                                <TrendingDown size={20} />
-                                {t('transaction.type_PAYMENT')}
-                            </button>
-                        </div>
-
-                        {/* Folio Selection */}
-                        {!folioId && (
-                            <div>
-                                <label className="label">Folio *</label>
-                                <select
-                                    value={selectedFolio || ''}
-                                    onChange={(e) => setSelectedFolio(Number(e.target.value))}
-                                    className="select"
-                                    required
-                                >
-                                    <option value="">Sélectionnez un folio</option>
-                                    {folios.map((folio) => (
-                                        <option key={folio.id} value={folio.id}>
-                                            {folio.code} - {folio.running_balance.toFixed(2)} MRU
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-                        )}
-
-                        {/* Amount */}
-                        <div>
-                            <label className="label">{t('transaction.amount')} *</label>
-                            <input
-                                type="number"
-                                value={amount}
-                                onChange={(e) => setAmount(e.target.value)}
-                                className="input"
-                                placeholder="0.00"
-                                min="0.01"
-                                step="0.01"
-                                required
-                            />
-                        </div>
-
-                        {/* Payment Method */}
-                        <div>
-                            <label className="label">{t('transaction.payment_method')}</label>
-                            <div className="grid grid-cols-3 gap-2">
-                                {['CASH', 'CARD', 'TRANSFER', 'CHECK', 'MOBILE', 'OTHER'].map((method) => (
-                                    <button
-                                        key={method}
-                                        type="button"
-                                        onClick={() => setPaymentMethod(method)}
-                                        className={`p-2 rounded-lg text-sm flex items-center justify-center gap-1 transition-all ${paymentMethod === method
-                                            ? 'bg-blue-500 text-white'
-                                            : 'bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200'
-                                            }`}
-                                    >
-                                        <span>{paymentMethodIcons[method]}</span>
-                                        <span className="hidden sm:inline">{t(`transaction.method_${method}`)}</span>
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-
-                        {/* Client/Supplier Name */}
-                        <div>
-                            <label className="label">
-                                {type === 'RECEIPT' ? t('transaction.client_name') : t('transaction.supplier_name')}
-                            </label>
-                            <input
-                                type="text"
-                                value={clientName}
-                                onChange={(e) => setClientName(e.target.value)}
-                                className="input"
-                                placeholder="Nom..."
-                            />
-                        </div>
-
-                        {/* Reference */}
-                        <div>
-                            <label className="label">{t('transaction.reference')}</label>
-                            <input
-                                type="text"
-                                value={reference}
-                                onChange={(e) => setReference(e.target.value)}
-                                className="input"
-                                placeholder="Référence optionnelle..."
-                            />
-                        </div>
-
-                        {/* Description */}
-                        <div>
-                            <label className="label">{t('transaction.description')}</label>
-                            <textarea
-                                value={description}
-                                onChange={(e) => setDescription(e.target.value)}
-                                className="input"
-                                rows={2}
-                                placeholder="Description optionnelle..."
-                            />
-                        </div>
-
-                        <div className="flex gap-3 pt-4">
-                            <button type="button" onClick={onClose} className="btn-secondary flex-1" disabled={loading}>
-                                {t('common.cancel')}
-                            </button>
-                            <button
-                                type="submit"
-                                className={`flex-1 ${type === 'RECEIPT' ? 'btn-success' : 'btn-danger'}`}
-                                disabled={loading || !amount || !selectedFolio}
-                            >
-                                {loading ? <span className="spinner" /> : t('common.create')}
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            </motion.div>
-        </div>
-    );
-}
-
 export default function TransactionsPage() {
     const { t } = useTranslation('common');
     const router = useRouter();
     const { user, hasRole } = useAuth();
+    const [pdfLoading, setPdfLoading] = useState(false);
 
     const [transactions, setTransactions] = useState<Transaction[]>([]);
     const [loading, setLoading] = useState(true);
@@ -430,6 +200,30 @@ export default function TransactionsPage() {
         }
     };
 
+    const handleExportPDF = async () => {
+        setPdfLoading(true);
+        try {
+            const params: Record<string, string> = {};
+            if (typeFilter) params.type = typeFilter;
+            if (statusFilter) params.status = statusFilter;
+            if (dateFrom) params.date_from = dateFrom;
+            if (dateTo) params.date_to = dateTo;
+            if (folioFilter) params.folio = folioFilter.toString();
+
+            // Use the same params to generate a PDF report for these transactions
+            const blob = await reportPdfApi.downloadPDF({
+                date_from: params.date_from || '',
+                date_to: params.date_to || ''
+            });
+            downloadFile(blob, `rapport_transactions_${new Date().toISOString().split('T')[0]}.pdf`);
+        } catch (error) {
+            console.error('Error downloading PDF:', error);
+            alert(t('common.error'));
+        } finally {
+            setPdfLoading(false);
+        }
+    };
+
     const filteredTransactions = transactions.filter((tx) => {
         if (!searchQuery) return true;
         const query = searchQuery.toLowerCase();
@@ -460,7 +254,30 @@ export default function TransactionsPage() {
 
     const canCreate = hasRole(['ADMIN', 'GERANT', 'CAISSIER']);
     const canVoid = hasRole(['ADMIN', 'GERANT', 'CAISSIER']);
-    const canExport = hasRole(['ADMIN', 'GERANT', 'CAISSIER']);
+    const canApproveVoid = hasRole(['ADMIN', 'GERANT']);
+    const canExportCSV = hasRole(['CAISSIER']);
+    const canExportPDF = hasRole(['ADMIN', 'GERANT']);
+
+    const handleApproveVoid = async (tx: Transaction) => {
+        if (!confirm(t('transaction.confirm_approve_void').replace('{{id}}', tx.id.toString()))) return;
+        try {
+            await transactionApi.approveVoid(tx.id);
+            fetchTransactions();
+        } catch (error) {
+            alert(error instanceof Error ? error.message : t('common.error'));
+        }
+    };
+
+    const handleRejectVoid = async (tx: Transaction) => {
+        const reason = prompt(t('transaction.prompt_reject_reason'));
+        if (!reason) return;
+        try {
+            await transactionApi.rejectVoid(tx.id, reason);
+            fetchTransactions();
+        } catch (error) {
+            alert(error instanceof Error ? error.message : t('common.error'));
+        }
+    };
 
     // Calculate totals
     const totalReceipts = filteredTransactions
@@ -480,15 +297,21 @@ export default function TransactionsPage() {
                         {t('transaction.title')}
                     </h1>
                     <p className="text-gray-500 dark:text-gray-400">
-                        Journal de toutes les transactions
+                        {t('transaction.description')}
                     </p>
                 </div>
 
                 <div className="flex gap-2">
-                    {canExport && (
+                    {canExportCSV && (
                         <button onClick={handleExport} className="btn-secondary">
                             <Download size={18} />
                             {t('transaction.export')}
+                        </button>
+                    )}
+                    {canExportPDF && (
+                        <button onClick={handleExportPDF} className="btn-primary" disabled={pdfLoading}>
+                            {pdfLoading ? <span className="spinner" /> : <Download size={18} />}
+                            {t('reports.download_pdf')}
                         </button>
                     )}
                     {canCreate && (
@@ -603,8 +426,8 @@ export default function TransactionsPage() {
                     <div className="p-12">
                         <div className="empty-state">
                             <FileText className="empty-state-icon" />
-                            <h3 className="text-lg font-medium mb-2">Aucune transaction</h3>
-                            <p className="text-gray-500 mb-4">Aucune transaction ne correspond à vos critères</p>
+                            <h3 className="text-lg font-medium mb-2">{t('transaction.not_found')}</h3>
+                            <p className="text-gray-500 mb-4">{t('transaction.not_found_desc')}</p>
                         </div>
                     </div>
                 ) : (
@@ -680,11 +503,33 @@ export default function TransactionsPage() {
                                                         <Printer size={16} />
                                                     </button>
                                                 )}
+                                                {/* Approve / Reject void request (Admin/GERANT only, PENDING transactions) */}
+                                                {canApproveVoid && tx.status === 'PENDING' && tx.void_requested_by && (
+                                                    <>
+                                                        <button
+                                                            onClick={() => handleApproveVoid(tx)}
+                                                            className="btn-icon text-emerald-600 hover:bg-emerald-50"
+                                                            title={t('transaction.approve_void')}
+                                                            id={`approve-void-btn-${tx.id}`}
+                                                        >
+                                                            <ThumbsUp size={16} />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleRejectVoid(tx)}
+                                                            className="btn-icon text-red-600 hover:bg-red-50"
+                                                            title={t('transaction.reject_void')}
+                                                            id={`reject-void-btn-${tx.id}`}
+                                                        >
+                                                            <ThumbsDown size={16} />
+                                                        </button>
+                                                    </>
+                                                )}
+                                                {/* Void button: direct for Admin/GERANT, request for others */}
                                                 {canVoid && tx.status === 'APPROVED' && !tx.is_void && (
                                                     <button
                                                         onClick={() => setVoidModal({ open: true, transaction: tx })}
                                                         className="btn-icon text-red-600 hover:bg-red-50"
-                                                        title={t('transaction.void_transaction')}
+                                                        title={hasRole(['ADMIN', 'GERANT']) ? t('transaction.void_transaction') : t('transaction.request_void')}
                                                     >
                                                         <XCircle size={16} />
                                                     </button>
@@ -700,7 +545,7 @@ export default function TransactionsPage() {
             </div>
 
             {/* Create Transaction Modal */}
-            <CreateTransactionModal
+            <TransactionModal
                 isOpen={createModalOpen}
                 folioId={folioFilter}
                 onClose={() => setCreateModalOpen(false)}

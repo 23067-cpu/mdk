@@ -107,7 +107,7 @@ function ApprovalModal({ isOpen, settlement, action, onClose, onSuccess }: Appro
                                     rows={4}
                                     required
                                     minLength={10}
-                                    placeholder="Expliquez la raison du rejet..."
+                                    placeholder={t('settlement.reject_reason_placeholder')}
                                 />
                             </div>
                         )}
@@ -115,7 +115,7 @@ function ApprovalModal({ isOpen, settlement, action, onClose, onSuccess }: Appro
                         {action === 'approve' && (
                             <div className="p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl">
                                 <p className="text-sm text-emerald-700 dark:text-emerald-400">
-                                    Vous êtes sur le point d&apos;approuver ce règlement. Cette action est irréversible.
+                                    {t('settlement.approve_warning')}
                                 </p>
                             </div>
                         )}
@@ -161,6 +161,7 @@ function CreateSettlementModal({ isOpen, defaultPartyType, onClose, onSuccess }:
     const [invoices, setInvoices] = useState<Invoice[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const [invoiceSearch, setInvoiceSearch] = useState('');
 
     useEffect(() => {
         if (isOpen) {
@@ -226,6 +227,17 @@ function CreateSettlementModal({ isOpen, defaultPartyType, onClose, onSuccess }:
         );
     };
 
+    // Filter invoices by party name search
+    const filteredInvoices = invoices.filter(inv =>
+        !invoiceSearch || inv.party_name.toLowerCase().includes(invoiceSearch.toLowerCase()) || inv.invoice_number.toLowerCase().includes(invoiceSearch.toLowerCase())
+    );
+
+    // Compute total remaining of selected invoices
+    const selectedInvoiceData = invoices.filter(inv => selectedInvoices.includes(inv.id));
+    const maxAllowedAmount = selectedInvoiceData.reduce((sum, inv) => sum + parseFloat(inv.remaining_amount), 0);
+    const amountNum = parseFloat(amount) || 0;
+    const isOverpaying = selectedInvoices.length > 0 && amountNum > maxAllowedAmount;
+
     if (!isOpen) return null;
 
     return (
@@ -283,7 +295,7 @@ function CreateSettlementModal({ isOpen, defaultPartyType, onClose, onSuccess }:
                                 className="select"
                                 required
                             >
-                                <option value="">Sélectionnez un folio</option>
+                                <option value="">{t('settlement.select_folio')}</option>
                                 {folios.map((folio) => (
                                     <option key={folio.id} value={folio.id}>
                                         {folio.code} - {folio.running_balance.toFixed(2)} MRU
@@ -301,7 +313,7 @@ function CreateSettlementModal({ isOpen, defaultPartyType, onClose, onSuccess }:
                                 onChange={(e) => setPartyName(e.target.value)}
                                 className="input"
                                 required
-                                placeholder={partyType === 'CLIENT' ? 'Nom du client' : 'Nom du fournisseur'}
+                                placeholder={partyType === 'CLIENT' ? t('settlement.client_placeholder') : t('settlement.supplier_placeholder')}
                             />
                         </div>
 
@@ -312,12 +324,21 @@ function CreateSettlementModal({ isOpen, defaultPartyType, onClose, onSuccess }:
                                 type="number"
                                 value={amount}
                                 onChange={(e) => setAmount(e.target.value)}
-                                className="input"
+                                className={`input ${isOverpaying ? 'border-red-400 focus:ring-red-400' : ''}`}
                                 placeholder="0.00"
                                 min="0.01"
                                 step="0.01"
                                 required
                             />
+                            {selectedInvoices.length > 0 && (
+                                <div className={`mt-1 text-xs flex items-center gap-1 ${isOverpaying ? 'text-red-600 font-semibold' : 'text-gray-500'}`}>
+                                    {isOverpaying ? (
+                                        <><AlertCircle size={12} /> {t('settlement.overpayment_warning', { max: maxAllowedAmount.toFixed(2) })}</>
+                                    ) : (
+                                        <span>{t('settlement.max_amount', { max: maxAllowedAmount.toFixed(2) })}</span>
+                                    )}
+                                </div>
+                            )}
                         </div>
 
                         {/* Method */}
@@ -328,7 +349,7 @@ function CreateSettlementModal({ isOpen, defaultPartyType, onClose, onSuccess }:
                                 value={method}
                                 onChange={(e) => setMethod(e.target.value)}
                                 className="input"
-                                placeholder="Ex: Espèces, Virement, Chèque..."
+                                placeholder={t('settlement.method_placeholder')}
                             />
                         </div>
 
@@ -340,7 +361,7 @@ function CreateSettlementModal({ isOpen, defaultPartyType, onClose, onSuccess }:
                                 value={reference}
                                 onChange={(e) => setReference(e.target.value)}
                                 className="input"
-                                placeholder="Référence optionnelle..."
+                                placeholder={t('settlement.reference_placeholder')}
                             />
                         </div>
 
@@ -348,8 +369,21 @@ function CreateSettlementModal({ isOpen, defaultPartyType, onClose, onSuccess }:
                         {invoices.length > 0 && (
                             <div>
                                 <label className="label">{t('settlement.linked_invoices')}</label>
+                                {/* Search by party name */}
+                                <div className="relative mb-2">
+                                    <Search className="absolute left-3 rtl:left-auto rtl:right-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
+                                    <input
+                                        type="text"
+                                        value={invoiceSearch}
+                                        onChange={(e) => setInvoiceSearch(e.target.value)}
+                                        placeholder={t('settlement.search_invoice_placeholder')}
+                                        className="input pl-8 rtl:pl-4 rtl:pr-8 text-sm py-2"
+                                    />
+                                </div>
                                 <div className="space-y-2 max-h-40 overflow-y-auto p-2 border border-gray-200 dark:border-slate-700 rounded-xl">
-                                    {invoices.map((invoice) => (
+                                    {filteredInvoices.length === 0 ? (
+                                        <p className="text-sm text-gray-400 text-center py-2">{t('common.no_results')}</p>
+                                    ) : filteredInvoices.map((invoice) => (
                                         <label
                                             key={invoice.id}
                                             className={`flex items-center justify-between p-3 rounded-lg cursor-pointer transition-all ${selectedInvoices.includes(invoice.id)
@@ -369,7 +403,7 @@ function CreateSettlementModal({ isOpen, defaultPartyType, onClose, onSuccess }:
                                                     <p className="text-xs text-gray-500">{invoice.party_name}</p>
                                                 </div>
                                             </div>
-                                            <span className="font-medium text-sm">
+                                            <span className="font-medium text-sm text-amber-600">
                                                 {parseFloat(invoice.remaining_amount).toFixed(2)} MRU
                                             </span>
                                         </label>
@@ -397,7 +431,7 @@ function CreateSettlementModal({ isOpen, defaultPartyType, onClose, onSuccess }:
                             <button
                                 type="submit"
                                 className="btn-primary flex-1"
-                                disabled={loading || !partyName || !amount || !selectedFolio}
+                                disabled={loading || !partyName || !amount || !selectedFolio || isOverpaying}
                             >
                                 {loading ? <span className="spinner" /> : t('common.create')}
                             </button>
@@ -481,7 +515,7 @@ export default function SettlementsPage() {
         });
     };
 
-    const canCreate = hasRole(['ADMIN', 'GERANT', 'CAISSIER', 'SAISIE_CLIENT', 'SAISIE_FOURNISSEUR']);
+    const canCreate = hasRole(['ADMIN', 'GERANT', 'CAISSIER']);
     const canApprove = hasRole(['ADMIN', 'GERANT']);
 
     // Stats
@@ -499,7 +533,7 @@ export default function SettlementsPage() {
                         {t('settlement.title')}
                     </h1>
                     <p className="text-gray-500 dark:text-gray-400">
-                        Gérez les règlements clients et fournisseurs
+                        {t('settlement.description')}
                     </p>
                 </div>
 
@@ -518,7 +552,7 @@ export default function SettlementsPage() {
                         <Clock size={24} />
                     </div>
                     <div>
-                        <p className="text-sm text-gray-500">En attente</p>
+                        <p className="text-sm text-gray-500">{t('settlement.status_PENDING')}</p>
                         <p className="text-xl font-bold text-amber-600">{pendingCount}</p>
                     </div>
                 </div>
@@ -528,7 +562,7 @@ export default function SettlementsPage() {
                         <CheckCircle size={24} />
                     </div>
                     <div>
-                        <p className="text-sm text-gray-500">Total approuvé</p>
+                        <p className="text-sm text-gray-500">{t('settlement.total_approved')}</p>
                         <p className="text-xl font-bold text-emerald-600">{formatCurrency(totalAmount)}</p>
                     </div>
                 </div>
@@ -538,7 +572,7 @@ export default function SettlementsPage() {
                         <FileCheck size={24} />
                     </div>
                     <div>
-                        <p className="text-sm text-gray-500">Total règlements</p>
+                        <p className="text-sm text-gray-500">{t('settlement.total_settlements')}</p>
                         <p className="text-xl font-bold text-blue-600">{settlements.length}</p>
                     </div>
                 </div>
@@ -601,8 +635,8 @@ export default function SettlementsPage() {
                     <div className="p-12">
                         <div className="empty-state">
                             <FileCheck className="empty-state-icon" />
-                            <h3 className="text-lg font-medium mb-2">Aucun règlement</h3>
-                            <p className="text-gray-500 mb-4">Aucun règlement ne correspond à vos critères</p>
+                            <h3 className="text-lg font-medium mb-2">{t('settlement.not_found')}</h3>
+                            <p className="text-gray-500 mb-4">{t('settlement.not_found_desc')}</p>
                         </div>
                     </div>
                 ) : (

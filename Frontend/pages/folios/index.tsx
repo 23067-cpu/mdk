@@ -106,7 +106,7 @@ function CreateFolioModal({ isOpen, onClose, onSuccess }: CreateFolioModalProps)
                                 onChange={(e) => setNotes(e.target.value)}
                                 className="input"
                                 rows={3}
-                                placeholder="Notes optionnelles..."
+                                placeholder={t('folio.notes_placeholder')}
                             />
                         </div>
 
@@ -195,7 +195,7 @@ export default function FoliosPage() {
         });
     };
 
-    const canCreateFolio = hasRole(['ADMIN', 'GERANT', 'CAISSIER']);
+    const canCreateFolio = hasRole(['ADMIN', 'GERANT']);
 
     return (
         <div className="space-y-6">
@@ -206,7 +206,7 @@ export default function FoliosPage() {
                         {t('folio.title')}
                     </h1>
                     <p className="text-gray-500 dark:text-gray-400">
-                        Gérez vos folios de caisse et suivez les transactions
+                        {t('folio.description')}
                     </p>
                 </div>
 
@@ -232,7 +232,7 @@ export default function FoliosPage() {
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                             className="input pl-12 rtl:pl-4 rtl:pr-12"
-                            placeholder="Rechercher par code, utilisateur..."
+                            placeholder={t('common.search_folio_placeholder')}
                         />
                     </div>
 
@@ -245,7 +245,7 @@ export default function FoliosPage() {
                                 : 'bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-slate-600'
                                 }`}
                         >
-                            Tous
+                            {t('common.all')}
                         </button>
                         {['OPEN', 'CLOSURE_PROPOSED', 'CLOSED'].map((status) => (
                             <button
@@ -293,12 +293,12 @@ export default function FoliosPage() {
                     <div className="empty-state">
                         <FolderOpen className="empty-state-icon" />
                         <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                            Aucun folio trouvé
+                            {t('folio.not_found')}
                         </h3>
                         <p className="text-gray-500 dark:text-gray-400 mb-4">
                             {statusFilter
-                                ? `Aucun folio avec le statut "${t(`folio.status_${statusFilter}`)}"`
-                                : 'Commencez par créer un nouveau folio'
+                                ? t('folio.not_found_status').replace('{{status}}', t(`folio.status_${statusFilter}`) as string)
+                                : t('folio.start_create')
                             }
                         </p>
                         {canCreateFolio && !statusFilter && (
@@ -394,7 +394,7 @@ export default function FoliosPage() {
                                             : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
                                             }`}>
                                             <AlertTriangle size={14} />
-                                            Écart: {formatCurrency(folio.variance)}
+                                            {t('folio.variance')}: {formatCurrency(folio.variance)}
                                         </div>
                                     )}
                                 </div>
