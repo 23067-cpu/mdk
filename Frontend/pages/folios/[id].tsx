@@ -308,6 +308,16 @@ export default function FolioDetailPage() {
         fetchData();
     }, [id]);
 
+    // Handle auto-opening the closure modal based on URL params
+    useEffect(() => {
+        if (router.isReady && router.query.action === 'propose_closure') {
+            setIsBilletageModalOpen(true);
+            // Optionally clear the query param so it doesn't re-trigger on refresh
+            const { action, ...restList } = router.query;
+            router.replace({ pathname: router.pathname, query: restList }, undefined, { shallow: true });
+        }
+    }, [router.isReady, router.query.action]);
+
     const handlePrintSummary = async () => {
         if (!folio) return;
         try {

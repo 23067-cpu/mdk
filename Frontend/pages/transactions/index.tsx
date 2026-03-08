@@ -244,8 +244,20 @@ export default function TransactionsPage() {
         loading: boolean;
     }>({ open: false, type: 'approve', transaction: null, loading: false });
 
-    // Get folio filter from query params
+    // Get filters & actions from query params
     const folioFilter = router.query.folio ? Number(router.query.folio) : undefined;
+    const actionQuery = router.query.action as string;
+    const typeQuery = router.query.type as string;
+
+    // Handle auto-opening the create modal based on URL params
+    useEffect(() => {
+        if (router.isReady && actionQuery === 'new') {
+            setCreateModalOpen(true);
+            // Optionally clear the query param so it doesn't re-trigger on refresh
+            const { action, type, folio, ...restList } = router.query;
+            router.replace({ pathname: router.pathname, query: restList }, undefined, { shallow: true });
+        }
+    }, [router.isReady, actionQuery]);
 
     const fetchTransactions = async () => {
         setLoading(true);
@@ -697,6 +709,7 @@ export default function TransactionsPage() {
             {/* Create Transaction Modal */}
             <TransactionModal
                 isOpen={createModalOpen}
+                defaultType={(typeQuery as 'RECEIPT' | 'PAYMENT') || undefined}
                 folioId={folioFilter}
                 onClose={() => setCreateModalOpen(false)}
                 onSuccess={fetchTransactions}

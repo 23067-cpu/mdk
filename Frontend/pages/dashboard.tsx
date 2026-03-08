@@ -525,21 +525,21 @@ export default function Dashboard() {
                             {currentFolio?.status === 'OPEN' ? (
                                 <>
                                     <Link
-                                        href={`/transactions/new?type=RECEIPT&folio=${currentFolio.id}`}
+                                        href={`/transactions?action=new&type=RECEIPT&folio=${currentFolio.id}`}
                                         className="btn-success w-full flex items-center justify-center gap-2"
                                     >
                                         <TrendingUp size={18} />
                                         {t('transaction.type_RECEIPT')}
                                     </Link>
                                     <Link
-                                        href={`/transactions/new?type=PAYMENT&folio=${currentFolio.id}`}
+                                        href={`/transactions?action=new&type=PAYMENT&folio=${currentFolio.id}`}
                                         className="btn-danger w-full flex items-center justify-center gap-2"
                                     >
                                         <TrendingDown size={18} />
                                         {t('transaction.type_PAYMENT')}
                                     </Link>
                                     <Link
-                                        href={`/folios/${currentFolio.id}`}
+                                        href={`/folios/${currentFolio.id}?action=propose_closure`}
                                         className="btn-secondary w-full flex items-center justify-center gap-2"
                                     >
                                         <Clock size={18} />
