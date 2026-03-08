@@ -145,7 +145,10 @@
     "not_found_desc": "لا توجد معاملة تطابق معاييرك",
     "approve_void": "الموافقة على الإلغاء",
     "reject_void": "رفض الإلغاء",
-    "request_void": "طلب الإلغاء"
+    "request_void": "طلب الإلغاء",
+    "confirm_approve_title": "تأكيد الموافقة على المعاملة",
+    "confirm_reject_title": "تأكيد رفض المعاملة",
+    "confirm_action_desc": "هذا الإجراء لا يمكن التراجع عنه."
   },
   "settlement": {
     "title": "التسويات",
@@ -333,7 +336,11 @@
     "NOTIF_VOID_APPROVED_TITLE": "تمت الموافقة على الإلغاء",
     "NOTIF_VOID_APPROVED_MSG": "تمت الموافقة على طلب الإلغاء #{{ref}}",
     "NOTIF_VOID_REJECTED_TITLE": "رُفض طلب الإلغاء",
-    "NOTIF_VOID_REJECTED_MSG": "رُفض طلب الإلغاء. السبب: {{reason}}"
+    "NOTIF_VOID_REJECTED_MSG": "رُفض طلب الإلغاء. السبب: {{reason}}",
+    "NOTIF_TX_APPROVED_TITLE": "تمت الموافقة على المعاملة",
+    "NOTIF_TX_APPROVED_MSG": "تمت الموافقة على معاملتك بقيمة {{amount}} أوقية.",
+    "NOTIF_TX_REJECTED_TITLE": "تم رفض المعاملة",
+    "NOTIF_TX_REJECTED_MSG": "تم رفض معاملتك بقيمة {{amount}} أوقية."
   },
   "common": {
     "loading": "جارٍ التحميل...",
@@ -498,11 +505,13 @@
     "default_currency": "العملة الافتراضية",
     "approval_rules": "قواعد الموافقة",
     "approval_threshold": "الحد الأقصى للموافقة على المعاملات",
-    "approval_threshold_help": "المعاملات التي تتجاوز هذا المبلغ تتطلب موافقة المدير",
+    "approval_threshold_help": "المعاملات التي تتجاوز هذا المبلغ تتطلب موافقة الجاره",
+    "approval_admin_threshold": "حد الإداري (Admin Threshold)",
+    "approval_admin_threshold_help": "فقط الإداري يمكنه الموافقة على المعاملات التي تبلغ هذا الحد أو تتجاوزه",
     "approval_settlement": "الموافقة على التسويات",
-    "approval_settlement_help": "طلب موافقة المدير على التسويات",
+    "approval_settlement_help": "طلب موافقة الجاره على التسويات",
     "approval_folio": "الموافقة على إغلاق الفوليو",
-    "approval_folio_help": "طلب موافقة المدير لإغلاق الفوليو",
+    "approval_folio_help": "طلب موافقة الجاره لإغلاق الفوليو",
     "security_settings": "إعدادات الأمان",
     "security_timeout": "مهلة الجلسة (دقائق)",
     "security_max_attempts": "أقصى عدد لمحاولات تسجيل الدخول",

@@ -378,7 +378,7 @@ export default function SettingsPage() {
                                     <div>
                                         <label className="label flex items-center gap-2">
                                             <DollarSign size={16} />
-                                            Limite Administrateur (Admin Threshold)
+                                            {t('settings.approval_admin_threshold')}
                                         </label>
                                         <div className="flex items-center gap-2">
                                             <input
@@ -390,7 +390,7 @@ export default function SettingsPage() {
                                             <span className="text-gray-500">MRU</span>
                                         </div>
                                         <p className="text-sm text-gray-500 mt-1">
-                                            Seul l'Administrateur peut approuver une transaction atteignant cette limite.
+                                            {t('settings.approval_admin_threshold_help')}
                                         </p>
                                     </div>
 

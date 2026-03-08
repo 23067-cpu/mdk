@@ -131,7 +131,95 @@ function VoidModal({ isOpen, transaction, onClose, onSuccess }: VoidModalProps) 
     );
 }
 
+// ── Confirm Approve/Reject Modal ──────────────────────────────────────────────
+interface ConfirmActionModalProps {
+    isOpen: boolean;
+    type: 'approve' | 'reject';
+    transaction: Transaction | null;
+    onClose: () => void;
+    onConfirm: () => void;
+    loading: boolean;
+}
+
+function ConfirmActionModal({ isOpen, type, transaction, onClose, onConfirm, loading }: ConfirmActionModalProps) {
+    const { t } = useTranslation('common');
+    if (!isOpen || !transaction) return null;
+
+    const isApprove = type === 'approve';
+    const amount = parseFloat(transaction.amount).toLocaleString('fr-FR', { minimumFractionDigits: 2 }) + ' MRU';
+
+    return (
+        <div className="modal-overlay" onClick={onClose}>
+            <motion.div
+                initial={{ opacity: 0, scale: 0.92, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                transition={{ duration: 0.2 }}
+                className="modal-content max-w-md w-full"
+                onClick={(e) => e.stopPropagation()}
+            >
+                <div className="p-6">
+                    {/* Icon + Title */}
+                    <div className="flex items-center gap-4 mb-5">
+                        <div className={`p-3 rounded-2xl ${isApprove
+                            ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600'
+                            : 'bg-red-100 dark:bg-red-900/40 text-red-600'}`}>
+                            {isApprove ? <CheckCircle size={28} /> : <XCircle size={28} />}
+                        </div>
+                        <div>
+                            <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                                {isApprove ? t('transaction.confirm_approve_title') : t('transaction.confirm_reject_title')}
+                            </h2>
+                            <p className="text-sm text-gray-500">{t('transaction.confirm_action_desc')}</p>
+                        </div>
+                    </div>
+
+                    {/* Transaction Details Card */}
+                    <div className="bg-gray-50 dark:bg-slate-800 rounded-2xl p-4 mb-6 space-y-2">
+                        <div className="flex justify-between text-sm">
+                            <span className="text-gray-500">{t('transaction.amount')}</span>
+                            <span className={`font-bold text-base ${transaction.type === 'RECEIPT' ? 'text-emerald-600' : 'text-red-600'}`}>
+                                {transaction.type === 'RECEIPT' ? '+' : '-'}{amount}
+                            </span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                            <span className="text-gray-500">{t('transaction.type')}</span>
+                            <span className="font-medium text-gray-800 dark:text-white">{t(`transaction.type_${transaction.type}`)}</span>
+                        </div>
+                        {transaction.reference && (
+                            <div className="flex justify-between text-sm">
+                                <span className="text-gray-500">{t('transaction.reference')}</span>
+                                <span className="font-medium text-gray-800 dark:text-white">{transaction.reference}</span>
+                            </div>
+                        )}
+                        <div className="flex justify-between text-sm">
+                            <span className="text-gray-500">Folio</span>
+                            <span className="font-medium text-gray-800 dark:text-white">{transaction.folio_code || transaction.folio}</span>
+                        </div>
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="flex gap-3">
+                        <button onClick={onClose} className="btn-secondary flex-1" disabled={loading}>
+                            {t('common.cancel')}
+                        </button>
+                        <button
+                            onClick={onConfirm}
+                            className={`flex-1 ${isApprove ? 'btn-success' : 'btn-danger'}`}
+                            disabled={loading}
+                        >
+                            {loading ? <span className="spinner" /> : (
+                                isApprove ? t('common.confirm') : t('settlement.reject')
+                            )}
+                        </button>
+                    </div>
+                </div>
+            </motion.div>
+        </div>
+    );
+}
+
 export default function TransactionsPage() {
+
     const { t } = useTranslation('common');
     const router = useRouter();
     const { user, hasRole } = useAuth();
@@ -149,6 +237,12 @@ export default function TransactionsPage() {
         open: false,
         transaction: null,
     });
+    const [confirmModal, setConfirmModal] = useState<{
+        open: boolean;
+        type: 'approve' | 'reject';
+        transaction: Transaction | null;
+        loading: boolean;
+    }>({ open: false, type: 'approve', transaction: null, loading: false });
 
     // Get folio filter from query params
     const folioFilter = router.query.folio ? Number(router.query.folio) : undefined;
@@ -280,26 +374,32 @@ export default function TransactionsPage() {
     };
 
     const handleApproveTransaction = async (tx: Transaction) => {
-        if (!confirm(`Approuver la transaction de ${formatCurrency(tx.amount)} ?`)) return;
-        try {
-            const result = await transactionApi.approve(tx.id);
-            if (result.success) fetchTransactions();
-            else alert(result.message || t('common.error'));
-        } catch (error) {
-            alert(error instanceof Error ? error.message : t('common.error'));
-        }
+        setConfirmModal({ open: true, type: 'approve', transaction: tx, loading: false });
     };
 
     const handleRejectTransaction = async (tx: Transaction) => {
-        if (!confirm(`Refuser la transaction de ${formatCurrency(tx.amount)} ?`)) return;
+        setConfirmModal({ open: true, type: 'reject', transaction: tx, loading: false });
+    };
+
+    const handleConfirmAction = async () => {
+        if (!confirmModal.transaction) return;
+        setConfirmModal(prev => ({ ...prev, loading: true }));
         try {
-            const result = await transactionApi.reject(tx.id);
-            if (result.success) fetchTransactions();
-            else alert(result.message || t('common.error'));
+            if (confirmModal.type === 'approve') {
+                const result = await transactionApi.approve(confirmModal.transaction.id);
+                if (!result.success) alert(result.message || t('common.error'));
+            } else {
+                const result = await transactionApi.reject(confirmModal.transaction.id);
+                if (!result.success) alert(result.message || t('common.error'));
+            }
+            fetchTransactions();
         } catch (error) {
             alert(error instanceof Error ? error.message : t('common.error'));
+        } finally {
+            setConfirmModal({ open: false, type: 'approve', transaction: null, loading: false });
         }
     };
+
 
     // Calculate totals
     const totalReceipts = filteredTransactions
@@ -601,6 +701,16 @@ export default function TransactionsPage() {
                 transaction={voidModal.transaction}
                 onClose={() => setVoidModal({ open: false, transaction: null })}
                 onSuccess={fetchTransactions}
+            />
+
+            {/* Approve / Reject Confirmation Modal */}
+            <ConfirmActionModal
+                isOpen={confirmModal.open}
+                type={confirmModal.type}
+                transaction={confirmModal.transaction}
+                onClose={() => setConfirmModal({ open: false, type: 'approve', transaction: null, loading: false })}
+                onConfirm={handleConfirmAction}
+                loading={confirmModal.loading}
             />
         </div>
     );

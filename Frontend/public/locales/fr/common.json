@@ -145,7 +145,10 @@
     "not_found_desc": "Aucune transaction ne correspond à vos critères",
     "approve_void": "Approuver l'annulation",
     "reject_void": "Refuser l'annulation",
-    "request_void": "Demander annulation"
+    "request_void": "Demander annulation",
+    "confirm_approve_title": "Confirmer l'approbation",
+    "confirm_reject_title": "Confirmer le refus",
+    "confirm_action_desc": "Cette action est irréversible."
   },
   "settlement": {
     "title": "Règlements",
@@ -333,7 +336,11 @@
     "NOTIF_VOID_APPROVED_TITLE": "Annulation approuvée",
     "NOTIF_VOID_APPROVED_MSG": "Votre demande d'annulation #{{ref}} a été approuvée",
     "NOTIF_VOID_REJECTED_TITLE": "Annulation refusée",
-    "NOTIF_VOID_REJECTED_MSG": "Votre demande d'annulation a été refusée. Raison: {{reason}}"
+    "NOTIF_VOID_REJECTED_MSG": "Votre demande d'annulation a été refusée. Raison: {{reason}}",
+    "NOTIF_TX_APPROVED_TITLE": "Transaction approuvée",
+    "NOTIF_TX_APPROVED_MSG": "Votre transaction de {{amount}} MRU a été approuvée.",
+    "NOTIF_TX_REJECTED_TITLE": "Transaction refusée",
+    "NOTIF_TX_REJECTED_MSG": "Votre transaction de {{amount}} MRU a été refusée."
   },
   "common": {
     "loading": "Chargement...",
@@ -499,11 +506,11 @@
     "default_currency": "Devise par défaut",
     "approval_rules": "Règles d'approbation",
     "approval_threshold": "Seuil d'approbation des transactions",
-    "approval_threshold_help": "Les transactions supérieures à ce montant nécessitent l'approbation du Gérant",
+    "approval_threshold_help": "Les transactions dépassant ce montant nécessitent l'approbation du Gérant",
     "approval_settlement": "Approbation des règlements",
-    "approval_settlement_help": "Exiger l'approbation du Gérant pour les règlements",
+    "approval_settlement_help": "Demander l'approbation du Gérant pour les règlements",
     "approval_folio": "Approbation de clôture Folio",
-    "approval_folio_help": "Exiger l'approbation du Gérant pour fermer un folio",
+    "approval_folio_help": "Demander l'approbation du Gérant pour la clôture du folio",
     "security_settings": "Paramètres de sécurité",
     "security_timeout": "Timeout de session (minutes)",
     "security_max_attempts": "Tentatives de connexion max",
@@ -519,7 +526,9 @@
     "receipt_header": "Texte d'en-tête",
     "receipt_footer": "Texte de pied de page",
     "receipt_qr": "Afficher le QR Code",
-    "receipt_signature": "Inclure la ligne de signature"
+    "receipt_signature": "Inclure la ligne de signature",
+    "approval_admin_threshold": "Limite Administrateur (Admin Threshold)",
+    "approval_admin_threshold_help": "Seul l'Administrateur peut approuver une transaction atteignant cette limite."
   },
   "audit": {
     "title": "Journal d'audit",

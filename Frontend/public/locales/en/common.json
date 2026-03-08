@@ -145,7 +145,10 @@
     "not_found_desc": "No transaction matches your criteria",
     "approve_void": "Approve Void",
     "reject_void": "Reject Void",
-    "request_void": "Request void"
+    "request_void": "Request void",
+    "confirm_approve_title": "Confirm Approval",
+    "confirm_reject_title": "Confirm Rejection",
+    "confirm_action_desc": "This action cannot be undone."
   },
   "settlement": {
     "title": "Settlements",
@@ -333,7 +336,11 @@
     "NOTIF_VOID_APPROVED_TITLE": "Void Approved",
     "NOTIF_VOID_APPROVED_MSG": "Your void request #{{ref}} was approved",
     "NOTIF_VOID_REJECTED_TITLE": "Void Rejected",
-    "NOTIF_VOID_REJECTED_MSG": "Your void request was rejected. Reason: {{reason}}"
+    "NOTIF_VOID_REJECTED_MSG": "Your void request was rejected. Reason: {{reason}}",
+    "NOTIF_TX_APPROVED_TITLE": "Transaction Approved",
+    "NOTIF_TX_APPROVED_MSG": "Your transaction of {{amount}} MRU has been approved.",
+    "NOTIF_TX_REJECTED_TITLE": "Transaction Rejected",
+    "NOTIF_TX_REJECTED_MSG": "Your transaction of {{amount}} MRU has been rejected."
   },
   "common": {
     "loading": "Loading...",
@@ -498,11 +505,11 @@
     "default_currency": "Default Currency",
     "approval_rules": "Approval Rules",
     "approval_threshold": "Transaction Approval Threshold",
-    "approval_threshold_help": "Transactions above this amount require Manager approval",
+    "approval_threshold_help": "Transactions exceeding this amount require Gérant approval",
     "approval_settlement": "Settlement Approval",
-    "approval_settlement_help": "Require Manager approval for settlements",
+    "approval_settlement_help": "Request Gérant approval for settlements",
     "approval_folio": "Folio Closure Approval",
-    "approval_folio_help": "Require Manager approval to close a folio",
+    "approval_folio_help": "Request Gérant approval for folio closure",
     "security_settings": "Security Settings",
     "security_timeout": "Session Timeout (minutes)",
     "security_max_attempts": "Max Login Attempts",
@@ -518,7 +525,9 @@
     "receipt_header": "Header Text",
     "receipt_footer": "Footer Text",
     "receipt_qr": "Show QR Code",
-    "receipt_signature": "Include signature line"
+    "receipt_signature": "Include signature line",
+    "approval_admin_threshold": "Administrator Limit (Admin Threshold)",
+    "approval_admin_threshold_help": "Only the Administrator can approve transactions reaching or exceeding this limit."
   },
   "audit": {
     "title": "Audit Log",
