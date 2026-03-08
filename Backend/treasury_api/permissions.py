@@ -114,10 +114,27 @@ class CanVoidTransaction(permissions.BasePermission):
 
 
 class CanManageUsers(permissions.BasePermission):
-    """Permission to manage users - Admin only"""
+    """Permission to manage users - Admin and Gérant"""
     
     def has_permission(self, request, view):
-        return request.user.is_authenticated and request.user.role == 'ADMIN'
+        return request.user.is_authenticated and request.user.role in ['ADMIN', 'GERANT']
+    
+    def has_object_permission(self, request, view, obj):
+        if request.user.role == 'ADMIN':
+            return True
+        
+        if request.user.role == 'GERANT':
+            # Gérants can only manage Caissiers
+            if obj.role != 'CAISSIER':
+                return False
+            
+            # If the Gérant is assigned to a specific branch, they can only manage users in that branch
+            if request.user.branch and obj.branch != request.user.branch:
+                return False
+                
+            return True
+            
+        return False
 
 
 class CanManageSettings(permissions.BasePermission):

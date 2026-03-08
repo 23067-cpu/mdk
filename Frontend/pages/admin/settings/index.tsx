@@ -25,6 +25,7 @@ const defaultSettings = {
     },
     approval: {
         transaction_threshold: 50000,
+        admin_transaction_threshold: 200000,
         settlement_requires_approval: true,
         folio_closure_requires_approval: true,
     },
@@ -371,6 +372,25 @@ export default function SettingsPage() {
                                         </div>
                                         <p className="text-sm text-gray-500 mt-1">
                                             {t('settings.approval_threshold_help')}
+                                        </p>
+                                    </div>
+
+                                    <div>
+                                        <label className="label flex items-center gap-2">
+                                            <DollarSign size={16} />
+                                            Limite Administrateur (Admin Threshold)
+                                        </label>
+                                        <div className="flex items-center gap-2">
+                                            <input
+                                                type="number"
+                                                value={settings.approval.admin_transaction_threshold}
+                                                onChange={(e) => updateSetting('approval', 'admin_transaction_threshold', e.target.value ? parseInt(e.target.value) : '')}
+                                                className="input w-40"
+                                            />
+                                            <span className="text-gray-500">MRU</span>
+                                        </div>
+                                        <p className="text-sm text-gray-500 mt-1">
+                                            Seul l'Administrateur peut approuver une transaction atteignant cette limite.
                                         </p>
                                     </div>
 

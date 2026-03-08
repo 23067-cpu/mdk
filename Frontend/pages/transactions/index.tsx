@@ -279,6 +279,28 @@ export default function TransactionsPage() {
         }
     };
 
+    const handleApproveTransaction = async (tx: Transaction) => {
+        if (!confirm(`Approuver la transaction de ${formatCurrency(tx.amount)} ?`)) return;
+        try {
+            const result = await transactionApi.approve(tx.id);
+            if (result.success) fetchTransactions();
+            else alert(result.message || t('common.error'));
+        } catch (error) {
+            alert(error instanceof Error ? error.message : t('common.error'));
+        }
+    };
+
+    const handleRejectTransaction = async (tx: Transaction) => {
+        if (!confirm(`Refuser la transaction de ${formatCurrency(tx.amount)} ?`)) return;
+        try {
+            const result = await transactionApi.reject(tx.id);
+            if (result.success) fetchTransactions();
+            else alert(result.message || t('common.error'));
+        } catch (error) {
+            alert(error instanceof Error ? error.message : t('common.error'));
+        }
+    };
+
     // Calculate totals
     const totalReceipts = filteredTransactions
         .filter((tx) => tx.type === 'RECEIPT' && tx.status === 'APPROVED')
@@ -503,7 +525,7 @@ export default function TransactionsPage() {
                                                         <Printer size={16} />
                                                     </button>
                                                 )}
-                                                {/* Approve / Reject void request (Admin/GERANT only, PENDING transactions) */}
+                                                {/* Approve / Reject void request (Admin/GERANT only, PENDING transactions with void request) */}
                                                 {canApproveVoid && tx.status === 'PENDING' && tx.void_requested_by && (
                                                     <>
                                                         <button
@@ -521,6 +543,27 @@ export default function TransactionsPage() {
                                                             id={`reject-void-btn-${tx.id}`}
                                                         >
                                                             <ThumbsDown size={16} />
+                                                        </button>
+                                                    </>
+                                                )}
+                                                {/* Approve / Reject pending transaction (Admin/GERANT, no void) */}
+                                                {canApproveVoid && tx.status === 'PENDING' && !tx.void_requested_by && (
+                                                    <>
+                                                        <button
+                                                            onClick={() => handleApproveTransaction(tx)}
+                                                            className="btn-icon text-emerald-600 hover:bg-emerald-50"
+                                                            title="Approuver la transaction"
+                                                            id={`approve-tx-btn-${tx.id}`}
+                                                        >
+                                                            <CheckCircle size={16} />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleRejectTransaction(tx)}
+                                                            className="btn-icon text-red-600 hover:bg-red-50"
+                                                            title="Refuser la transaction"
+                                                            id={`reject-tx-btn-${tx.id}`}
+                                                        >
+                                                            <XCircle size={16} />
                                                         </button>
                                                     </>
                                                 )}

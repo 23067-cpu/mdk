@@ -493,6 +493,22 @@ export const transactionApi = {
         return handleResponse(response);
     },
 
+    approve: async (id: number): Promise<{ success: boolean; transaction: Transaction; message: string }> => {
+        const response = await fetch(`${API_BASE_URL}/transactions/${id}/approve/`, {
+            method: 'POST',
+            headers: getAuthHeaders(),
+        });
+        return handleResponse(response);
+    },
+
+    reject: async (id: number): Promise<{ success: boolean; transaction: Transaction; message: string }> => {
+        const response = await fetch(`${API_BASE_URL}/transactions/${id}/reject/`, {
+            method: 'POST',
+            headers: getAuthHeaders(),
+        });
+        return handleResponse(response);
+    },
+
     printReceipt: async (id: number): Promise<Blob> => {
         const response = await fetch(`${API_BASE_URL}/transactions/${id}/print_receipt/`, {
             method: 'POST',

@@ -515,7 +515,7 @@ export default function FolioDetailPage() {
                             id="direct-close-folio-btn"
                         >
                             <Lock size={18} />
-                            Fermer le Folio
+                            {t('folio.close_folio')}
                         </button>
                     )}
 
@@ -526,7 +526,7 @@ export default function FolioDetailPage() {
                             id="assign-users-btn"
                         >
                             <Users size={18} />
-                            Assigner utilisateurs
+                            {t('folio.assign_users')}
                         </button>
                     )}
 
@@ -776,18 +776,18 @@ export default function FolioDetailPage() {
                         onClick={(e) => e.stopPropagation()}
                     >
                         <div className="p-6">
-                            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Fermer le Folio</h2>
+                            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">{t('folio.close_folio')}</h2>
                             <p className="text-sm text-gray-500 mb-6">
-                                Solde de clôture calculé : <strong>{formatCurrency(folio.running_balance)}</strong>
+                                {t('folio.calculated_closing_balance')} : <strong>{formatCurrency(folio.running_balance)}</strong>
                             </p>
                             <div className="mb-4">
-                                <label className="label">Notes (optionnel)</label>
+                                <label className="label">{t('common.notes')} ({t('common.optional')})</label>
                                 <textarea
                                     value={directCloseNotes}
                                     onChange={(e) => setDirectCloseNotes(e.target.value)}
                                     className="input"
                                     rows={3}
-                                    placeholder="Raison de la clôture directe..."
+                                    placeholder={t('folio.closure_reason_placeholder', 'Raison de la clôture directe...')}
                                 />
                             </div>
                             <div className="flex gap-3">

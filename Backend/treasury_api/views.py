@@ -43,6 +43,7 @@ from .permissions import (
     CanVoidTransaction, CanManageUsers, CanManageSettings,
     CanViewAuditLogs, CanExportReports
 )
+from .utils import send_smart_alert
 
 
 def log_audit(user, action, obj=None, details=None, reason=None, before=None, after=None, request=None):
@@ -416,7 +417,7 @@ class BranchViewSet(viewsets.ModelViewSet):
 
 
 class UserViewSet(viewsets.ModelViewSet):
-    """User management - Admin only"""
+    """User management - Admin and Gérant"""
     queryset = User.objects.all().order_by('-date_joined')
     permission_classes = [CanManageUsers]
     
@@ -427,16 +428,26 @@ class UserViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         queryset = super().get_queryset()
+        user = self.request.user
+        
+        # Enforce Gérant restrictions
+        if user.role == 'GERANT':
+            queryset = queryset.filter(role='CAISSIER')
+            if user.branch:
+                queryset = queryset.filter(branch=user.branch)
         
         # Filter by role
         role = self.request.query_params.get('role')
         if role:
-            queryset = queryset.filter(role=role)
+            # If Gérant, role filter is already restricted to CAISSIER
+            if user.role != 'GERANT' or role == 'CAISSIER':
+                queryset = queryset.filter(role=role)
         
         # Filter by branch
-        branch = self.request.query_params.get('branch')
-        if branch:
-            queryset = queryset.filter(branch_id=branch)
+        branch_id = self.request.query_params.get('branch')
+        if branch_id:
+            if user.role != 'GERANT' or (user.branch and str(user.branch.id) == str(branch_id)) or not user.branch:
+                queryset = queryset.filter(branch_id=branch_id)
         
         # Filter by active status
         is_active = self.request.query_params.get('is_active')
@@ -444,6 +455,20 @@ class UserViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(is_active=is_active.lower() == 'true')
         
         return queryset
+        
+    def perform_create(self, serializer):
+        user = self.request.user
+        
+        # Enforce Gérant restrictions on creation
+        if user.role == 'GERANT':
+            # Force role to CAISSIER
+            # Force branch to Gérant's branch if they have one
+            save_kwargs = {'role': 'CAISSIER'}
+            if user.branch:
+                save_kwargs['branch'] = user.branch
+            serializer.save(**save_kwargs)
+        else:
+            serializer.save()
     
     @action(detail=True, methods=['post'])
     def reset_password(self, request, pk=None):
@@ -696,6 +721,13 @@ class FolioViewSet(viewsets.ModelViewSet):
                     action_data={'folio_code': folio.code, 'user': request.user.get_full_name()},
                     action_url=f'/folios/{folio.id}'
                 )
+            
+            # Smart email alert
+            send_smart_alert('folio_closure', {
+                'folio': folio.code,
+                'user': request.user.get_full_name() or request.user.username,
+                'balance': float(folio.closing_balance)
+            })
         
         return Response({
             'success': True,
@@ -1008,13 +1040,27 @@ class TransactionViewSet(viewsets.ModelViewSet):
                 'message': 'Impossible d\'ajouter une transaction à un folio fermé'
             }, status=status.HTTP_400_BAD_REQUEST)
         
-        # Check approval threshold
-        amount = serializer.validated_data['amount']
-        approval_threshold = SystemSettings.objects.filter(key='approval_threshold').first()
-        requires_approval = False
+        # Check approval threshold based on tiered limits
+        amount = float(serializer.validated_data['amount'])
+        approval_setting = SystemSettings.objects.filter(key='approval').first()
         
-        if approval_threshold and float(amount) >= float(approval_threshold.value.get('amount', 0)):
-            requires_approval = True
+        requires_approval = False
+        requires_admin = False
+        
+        if approval_setting and isinstance(approval_setting.value, dict):
+            gerant_limit = float(approval_setting.value.get('transaction_threshold', 0))
+            admin_limit = float(approval_setting.value.get('admin_transaction_threshold', 0))
+            
+            if admin_limit > 0 and amount >= admin_limit:
+                requires_approval = True
+                requires_admin = True
+            elif gerant_limit > 0 and amount >= gerant_limit:
+                requires_approval = True
+        else:
+            # Fallback for old setting structure
+            approval_threshold = SystemSettings.objects.filter(key='approval_threshold').first()
+            if approval_threshold and amount >= float(approval_threshold.value.get('amount', 0)):
+                requires_approval = True
         
         with db_transaction.atomic():
             # Generate receipt number for RECEIPT type
@@ -1031,7 +1077,15 @@ class TransactionViewSet(viewsets.ModelViewSet):
                 requires_approval=requires_approval
             )
             
+            
             log_audit(request.user, 'CREATE_TRANSACTION', obj=transaction, request=request)
+            
+            # Smart email alert
+            send_smart_alert('high_value_transaction', {
+                'amount': float(transaction.amount),
+                'user': request.user.get_full_name() or request.user.username,
+                'folio': folio.code
+            })
             
             if requires_approval:
                 # Notify approvers
@@ -1056,6 +1110,104 @@ class TransactionViewSet(viewsets.ModelViewSet):
             'transaction': TransactionSerializer(transaction).data
         }, status=status.HTTP_201_CREATED)
     
+    @action(detail=True, methods=['post'])
+    def approve(self, request, pk=None):
+        """Approve a pending transaction"""
+        transaction = self.get_object()
+        
+        if transaction.status != 'PENDING':
+            return Response({
+                'success': False,
+                'message': 'Cette transaction n\'est pas en attente d\'approbation'
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+        with db_transaction.atomic():
+            requires_admin = False
+            approval_settings = SystemSettings.objects.filter(key='approval').first()
+            if approval_settings and isinstance(approval_settings.value, dict):
+                admin_limit = float(approval_settings.value.get('admin_transaction_threshold', 0))
+                if admin_limit > 0 and float(transaction.amount) >= admin_limit:
+                    requires_admin = True
+                    
+            if requires_admin and request.user.role != 'ADMIN':
+                return Response({
+                    'success': False,
+                    'message': f'Cette transaction nécessite l\'approbation d\'un Administrateur (montant >= {admin_limit})'
+                }, status=status.HTTP_403_FORBIDDEN)
+                
+            if request.user.role not in ['ADMIN', 'GERANT']:
+                return Response({
+                    'success': False,
+                    'message': 'Non autorisé'
+                }, status=status.HTTP_403_FORBIDDEN)
+                
+            transaction.status = 'APPROVED'
+            transaction.save()
+            
+            log_audit(request.user, 'APPROVE_TRANSACTION', obj=transaction, request=request)
+            
+            # Send smart email alert if it was a high-value transaction
+            send_smart_alert('high_value_transaction', {
+                'amount': float(transaction.amount),
+                'user': request.user.get_full_name() or request.user.username,
+                'folio': transaction.folio.code if transaction.folio else 'N/A'
+            })
+            
+            Notification.objects.create(
+                user=transaction.created_by,
+                notification_type='GENERAL',
+                priority='LOW',
+                title='Transaction approuvée',
+                message=f'Votre transaction de {transaction.amount} MRU a été approuvée.',
+                action_data={'ref': str(transaction.id)[:8]},
+                action_url='/transactions'
+            )
+            
+        return Response({
+            'success': True,
+            'message': 'Transaction approuvée',
+            'transaction': TransactionSerializer(transaction).data
+        })
+
+    @action(detail=True, methods=['post'])
+    def reject(self, request, pk=None):
+        """Reject a pending transaction"""
+        transaction = self.get_object()
+        
+        if transaction.status != 'PENDING':
+            return Response({
+                'success': False,
+                'message': 'Cette transaction n\'est pas en attente d\'approbation'
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+        if request.user.role not in ['ADMIN', 'GERANT']:
+            return Response({
+                'success': False,
+                'message': 'Non autorisé'
+            }, status=status.HTTP_403_FORBIDDEN)
+            
+        with db_transaction.atomic():
+            transaction.status = 'REJECTED'
+            transaction.save()
+            
+            log_audit(request.user, 'REJECT_TRANSACTION', obj=transaction, request=request)
+            
+            Notification.objects.create(
+                user=transaction.created_by,
+                notification_type='GENERAL',
+                priority='MEDIUM',
+                title='Transaction refusée',
+                message=f'Votre transaction de {transaction.amount} MRU a été refusée.',
+                action_data={'ref': str(transaction.id)[:8]},
+                action_url='/transactions'
+            )
+            
+        return Response({
+            'success': True,
+            'message': 'Transaction refusée',
+            'transaction': TransactionSerializer(transaction).data
+        })
+
     @action(detail=True, methods=['post'])
     def void(self, request, pk=None):
         """Void a transaction"""
@@ -1516,6 +1668,13 @@ class SettlementViewSet(viewsets.ModelViewSet):
                     action_data={'party_name': settlement.party_name},
                 action_url='/settlements'
             )
+            
+            # Smart email alert
+            send_smart_alert('settlement_approval', {
+                'amount': float(settlement.amount),
+                'user': request.user.get_full_name() or request.user.username,
+                'party_name': settlement.party_name
+            })
         
         return Response({
             'success': True,

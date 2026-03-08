@@ -27,6 +27,7 @@ interface UserModalProps {
 
 function UserModal({ isOpen, user: editUser, branches, onClose, onSuccess }: UserModalProps) {
     const { t, i18n } = useTranslation('common');
+    const { hasRole } = useAuth();
     const [formData, setFormData] = useState({
         username: '',
         email: '',
@@ -186,6 +187,7 @@ function UserModal({ isOpen, user: editUser, branches, onClose, onSuccess }: Use
                                     onChange={(e) => setFormData({ ...formData, role: e.target.value })}
                                     className="select"
                                     required
+                                    disabled={!hasRole('ADMIN')}
                                 >
                                     {Object.keys(ROLE_LABELS[i18n.language] || ROLE_LABELS.fr).map((role) => (
                                         <option key={role} value={role}>
@@ -200,6 +202,7 @@ function UserModal({ isOpen, user: editUser, branches, onClose, onSuccess }: Use
                                     value={formData.branch}
                                     onChange={(e) => setFormData({ ...formData, branch: e.target.value })}
                                     className="select"
+                                    disabled={!hasRole('ADMIN')}
                                 >
                                     <option value="">Toutes les branches</option>
                                     {branches.map((branch) => (
@@ -410,12 +413,12 @@ export default function UsersPage() {
         });
     };
 
-    if (!hasRole('ADMIN')) {
+    if (!hasRole('ADMIN') && !hasRole('GERANT')) {
         return (
             <div className="empty-state py-20">
                 <Lock className="empty-state-icon" />
                 <h3 className="text-lg font-medium mb-2">{t('auth.access_denied')}</h3>
-                <p className="text-gray-500">Cette page est réservée aux administrateurs</p>
+                <p className="text-gray-500">Accès refusé. Réservé aux administrateurs ou gérants.</p>
             </div>
         );
     }
