@@ -219,8 +219,8 @@ class AdminDashboardView(APIView):
                 })
         
         # KPIs
-        total_liquidity = Folio.objects.filter(status='OPEN').aggregate(
-            total=Sum('running_balance'))['total'] or 0
+        open_folios = Folio.objects.filter(status='OPEN')
+        total_liquidity = sum(folio.running_balance for folio in open_folios)
         
         open_folios = Folio.objects.filter(status='OPEN')
         
@@ -339,7 +339,7 @@ class GerantDashboardView(APIView):
         )[:5]
         
         data = {
-            'total_liquidity': float(open_folios.aggregate(Sum('running_balance'))['running_balance__sum'] or 0),
+            'total_liquidity': sum(folio.running_balance for folio in open_folios),
             'open_folios_count': open_folios.count(),
             'today_receipts': float(today_receipts),
             'today_payments': float(today_payments),
