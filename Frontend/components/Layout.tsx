@@ -174,7 +174,7 @@ export default function Layout({ children }: LayoutProps) {
         { href: '/settlements', icon: <FileCheck size={20} />, label: t('nav.settlements') },
         { href: '/invoices', icon: <Receipt size={20} />, label: t('nav.invoices') },
         { href: '/reports', icon: <BarChart3 size={20} />, label: t('nav.reports'), roles: ['ADMIN', 'GERANT', 'CAISSIER'] },
-        { href: '/admin/users', icon: <Users size={20} />, label: t('nav.users'), roles: ['ADMIN', 'GERANT'] },
+        { href: '/admin/users', icon: <Users size={20} />, label: t('nav.users'), roles: ['ADMIN'] },
         { href: '/admin/branches', icon: <Building2 size={20} />, label: t('nav.branches'), roles: ['ADMIN'] },
         { href: '/admin/settings', icon: <Settings size={20} />, label: t('nav.settings'), roles: ['ADMIN'] },
 
